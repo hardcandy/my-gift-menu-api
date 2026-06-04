@@ -8,6 +8,6 @@ import lombok.Setter;
 public class FamilyJoinVo {
     private String openId;
     private Integer familyId;
+    private String memberOpenId;
     private String role;
 }
-

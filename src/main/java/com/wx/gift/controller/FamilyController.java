@@ -66,6 +66,12 @@ public class FamilyController {
         return true;
     }
 
+    @RequestMapping("/member/remove")
+    public Boolean removeMember(@RequestBody FamilyJoinVo vo) {
+        familyService.removeMember(vo);
+        return true;
+    }
+
     @RequestMapping("/invite/generate")
     public CircleInviteDTO generateInvite(@RequestBody CircleInviteVo vo) {
         return familyService.generateInviteCode(vo);

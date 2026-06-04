@@ -151,6 +151,21 @@ public class FamilyServiceImpl implements FamilyService {
                 .eq(FamilyMember::getMemberOpenId, vo.getOpenId()));
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeMember(FamilyJoinVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getMemberOpenId(), "memberOpenId 不能为空");
+        Family family = familyMapper.selectById(vo.getFamilyId());
+        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(family.getOwnerOpenId()), "只有圈主可以删除成员");
+        ValidatorUtil.checkArgument(!vo.getMemberOpenId().equals(family.getOwnerOpenId()), "不能删除圈主");
+        familyMemberMapper.delete(new LambdaQueryWrapper<FamilyMember>()
+                .eq(FamilyMember::getFamilyId, vo.getFamilyId())
+                .eq(FamilyMember::getMemberOpenId, vo.getMemberOpenId()));
+    }
+
 
     @Override
     @Transactional(rollbackFor = Exception.class)
