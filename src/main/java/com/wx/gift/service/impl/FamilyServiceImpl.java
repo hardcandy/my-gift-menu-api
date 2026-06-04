@@ -68,7 +68,7 @@ public class FamilyServiceImpl implements FamilyService {
         String ownerRole = "family".equals(circleType) ? vo.getOwnerRole() : "relative";
         ValidatorUtil.checkArgument(!"family".equals(circleType) || StringUtils.isNotBlank(ownerRole), "家庭圈需要选择你的圈内角色");
         family.setOwnerOpenId(vo.getOpenId());
-        family.setOwnerRole(StringUtils.defaultIfBlank(ownerRole, "relative"));
+        family.setOwnerRole(StringUtils.defaultIfBlank(normalizeMemberRole(ownerRole), "relative"));
         family.setFamilyName(StringUtils.defaultIfBlank(vo.getFamilyName(), "我的圈子"));
         family.setCircleType(circleType);
         family.setCreateTime(now);
@@ -329,11 +329,23 @@ public class FamilyServiceImpl implements FamilyService {
         if (family == null || !"family".equals(family.getCircleType())) {
             return "relative";
         }
-        String role = StringUtils.defaultIfBlank(requestedRole, "");
-        if ("parent".equals(role) || "child".equals(role) || "relative".equals(role)) {
+        String role = normalizeMemberRole(requestedRole);
+        if (StringUtils.isNotBlank(role)) {
             return role;
         }
         return "relative";
+    }
+
+    private String normalizeMemberRole(String role) {
+        String value = StringUtils.defaultIfBlank(role, "");
+        if ("parent".equals(value) || "child".equals(value) || "relative".equals(value)
+                || "boy".equals(value) || "girl".equals(value)
+                || "dad".equals(value) || "mom".equals(value)
+                || "grandpa".equals(value) || "grandma".equals(value)
+                || "maternal_grandpa".equals(value) || "maternal_grandma".equals(value)) {
+            return value;
+        }
+        return "";
     }
 
     private boolean canApprove(Integer familyId, String openId) {

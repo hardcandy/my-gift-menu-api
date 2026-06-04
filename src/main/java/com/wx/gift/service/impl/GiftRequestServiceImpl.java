@@ -77,7 +77,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         ValidatorUtil.checkArgument(isCircleMember(family.getId(), vo.getOpenId()), "只有圈内成员可以发布愿望");
         String circleType = family.getCircleType();
         String requesterRole = circleMemberRole(family, vo.getOpenId());
-        boolean needsReview = "family".equals(circleType) && "child".equals(requesterRole);
+        boolean needsReview = "family".equals(circleType) && isChildRole(requesterRole);
         request.setStatus(needsReview ? GiftStatusEnum.PENDING_REVIEW.getCode() : GiftStatusEnum.OPEN.getCode());
         request.setCreatedByOpenId(vo.getOpenId());
         request.setCreateTime(now);
@@ -304,13 +304,27 @@ public class GiftRequestServiceImpl implements GiftRequestService {
             return false;
         }
         if (openId.equals(family.getOwnerOpenId())) {
-            return "parent".equals(family.getOwnerRole());
+            return isParentRole(family.getOwnerRole());
         }
         FamilyMember member = familyMemberMapper.selectOne(new LambdaQueryWrapper<FamilyMember>()
                 .eq(FamilyMember::getFamilyId, familyId)
                 .eq(FamilyMember::getMemberOpenId, openId)
                 .last("limit 1"));
-        return member != null && "parent".equals(member.getMemberRole());
+        return member != null && isParentRole(member.getMemberRole());
+    }
+
+    private boolean isParentRole(String role) {
+        return "parent".equals(role)
+                || "dad".equals(role)
+                || "mom".equals(role)
+                || "grandpa".equals(role)
+                || "grandma".equals(role)
+                || "maternal_grandpa".equals(role)
+                || "maternal_grandma".equals(role);
+    }
+
+    private boolean isChildRole(String role) {
+        return "child".equals(role) || "boy".equals(role) || "girl".equals(role);
     }
 
     private boolean isCircleMember(Integer familyId, String openId) {
@@ -383,4 +397,3 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         return status;
     }
 }
-
