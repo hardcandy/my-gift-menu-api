@@ -124,9 +124,9 @@ async function main() {
     requestId: childApply.id
   }), data => data && data.id === family.id);
 
-  await expectOk('孩子即使请求 child 身份也只能以亲友加入', () => post('/family/listMine', {
+  await expectOk('孩子按申请身份加入家庭圈', () => post('/family/listMine', {
     openId: users.child.openId
-  }), data => Array.isArray(data) && data.some(item => item.id === family.id && item.memberRole === 'relative'));
+  }), data => Array.isArray(data) && data.some(item => item.id === family.id && item.memberRole === 'child'));
 
   const relativeApply = await expectOk('亲友输入邀请码提交加入申请', () => post('/family/invite/code/join', {
     openId: users.relative.openId,

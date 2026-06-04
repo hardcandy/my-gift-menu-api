@@ -130,7 +130,7 @@ public class FamilyServiceImpl implements FamilyService {
             FamilyMember member = new FamilyMember();
             member.setFamilyId(vo.getFamilyId());
             member.setMemberOpenId(vo.getOpenId());
-            member.setMemberRole("relative");
+            member.setMemberRole(memberRoleForJoin(family, vo.getRole()));
             member.setCreateTime(now);
             member.setModifyTime(now);
             familyMemberMapper.insert(member);
@@ -187,10 +187,12 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         ValidatorUtil.checkNotBlank(vo.getInviteCode(), "邀请码不能为空");
         CircleInvite invite = getValidInvite(vo.getInviteCode());
+        Family family = familyMapper.selectById(invite.getFamilyId());
+        ValidatorUtil.checkNotNull(family, "圈子不存在");
         FamilyJoinVo joinVo = new FamilyJoinVo();
         joinVo.setOpenId(vo.getOpenId());
         joinVo.setFamilyId(invite.getFamilyId());
-        joinVo.setRole("relative");
+        joinVo.setRole(memberRoleForJoin(family, "relative"));
         return joinFamily(joinVo);
     }
 
@@ -247,7 +249,7 @@ public class FamilyServiceImpl implements FamilyService {
         request.setInviteCode(invite.getInviteCode());
         request.setApplicantOpenId(vo.getOpenId());
         request.setApplicantNickName(applicant == null ? "新成员" : applicant.getNickName());
-        request.setRequestedRole("relative");
+        request.setRequestedRole(memberRoleForJoin(family, vo.getRequestedRole()));
         request.setStatus("pending");
         request.setCreateTime(now);
         request.setModifyTime(now);
@@ -306,6 +308,17 @@ public class FamilyServiceImpl implements FamilyService {
 
     private String ownerRole(Family family) {
         return StringUtils.defaultIfBlank(family.getOwnerRole(), "family".equals(family.getCircleType()) ? "parent" : "relative");
+    }
+
+    private String memberRoleForJoin(Family family, String requestedRole) {
+        if (family == null || !"family".equals(family.getCircleType())) {
+            return "relative";
+        }
+        String role = StringUtils.defaultIfBlank(requestedRole, "");
+        if ("parent".equals(role) || "child".equals(role) || "relative".equals(role)) {
+            return role;
+        }
+        return "relative";
     }
 
     private boolean canApprove(Integer familyId, String openId) {
@@ -422,4 +435,3 @@ public class FamilyServiceImpl implements FamilyService {
         return childMapper.selectList(new LambdaQueryWrapper<Child>().eq(Child::getFamilyId, targetFamilyId).orderByDesc(Child::getId));
     }
 }
-
