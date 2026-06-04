@@ -1,17 +1,35 @@
 server:
-  port: 80
-
+  port: ${SERVER_PORT:80}
+  servlet:
+    context-path: /gift-menu-api
 
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_ADDRESS}/${MYSQL_DATABASE:springboot_demo}
-    username: ${MYSQL_USERNAME}
-    password: ${MYSQL_PASSWORD}
-  mvc:
-    view:
-      suffix: .html
-      prefix: /
+    url: ${MYSQL_URL:jdbc:mysql://${MYSQL_ADDRESS:127.0.0.1:3306}/${MYSQL_DATABASE:my_gift_menu}?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
 
-mybatis:
-  mapper-locations: classpath*:mapper/*Mapper.xml
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+wx:
+  appid: ${WX_APPID:wx451f85e2b68fbc8f}
+  subscribeTemplateId: ${WX_SUBSCRIBE_TEMPLATE_ID:}
+  secret: ${WX_SECRET:}
+  host: https://api.weixin.qq.com
+  url:
+    getOpenId: /sns/jscode2session
+    subscribeMessageSend: /cgi-bin/message/subscribe/send
+
+okhttp:
+  config:
+    connectTimeout: 10
+    writeTimeout: 5
+    readTimeout: 10
+    maxIdleConnections: 5
+    keepAliveDuration: 5
