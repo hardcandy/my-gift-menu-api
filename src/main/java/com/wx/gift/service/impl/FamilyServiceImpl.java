@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class FamilyServiceImpl implements FamilyService {
@@ -203,11 +203,12 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotNull(family, "圈子不存在");
         ValidatorUtil.checkArgument(vo.getOpenId().equals(family.getOwnerOpenId()), "只有圈主可以生成邀请码");
         Date now = new Date();
+        circleInviteMapper.delete(new LambdaQueryWrapper<CircleInvite>().le(CircleInvite::getExpireTime, now));
         CircleInvite invite = new CircleInvite();
         invite.setFamilyId(vo.getFamilyId());
-        invite.setInviteCode(UUID.randomUUID().toString().replace("-", ""));
+        invite.setInviteCode(nextInviteCode());
         invite.setCreatedByOpenId(vo.getOpenId());
-        invite.setExpireTime(new Date(now.getTime() + 3L * 24 * 60 * 60 * 1000));
+        invite.setExpireTime(new Date(now.getTime() + 10L * 60 * 1000));
         invite.setCreateTime(now);
         invite.setModifyTime(now);
         circleInviteMapper.insert(invite);
@@ -246,6 +247,19 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotNull(invite, "邀请码不存在");
         ValidatorUtil.checkArgument(invite.getExpireTime().after(new Date()), "邀请码已过期");
         return invite;
+    }
+
+    private String nextInviteCode() {
+        for (int i = 0; i < 50; i++) {
+            String code = String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
+            CircleInvite existing = circleInviteMapper.selectOne(new LambdaQueryWrapper<CircleInvite>()
+                    .eq(CircleInvite::getInviteCode, code)
+                    .last("limit 1"));
+            if (existing == null) {
+                return code;
+            }
+        }
+        throw new IllegalArgumentException("邀请码生成失败，请稍后再试");
     }
 
     private CircleInviteDTO toInviteDto(CircleInvite invite, Family family) {
