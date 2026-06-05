@@ -282,13 +282,7 @@ public class FamilyServiceImpl implements FamilyService {
         Family family = familyMapper.selectById(invite.getFamilyId());
         ValidatorUtil.checkNotNull(family, "圈子不存在");
         if (vo.getOpenId().equals(family.getOwnerOpenId()) || isCircleMember(invite.getFamilyId(), vo.getOpenId())) {
-            CircleJoinRequestDTO dto = new CircleJoinRequestDTO();
-            dto.setFamilyId(family.getId());
-            dto.setFamilyName(family.getFamilyName());
-            dto.setCircleType(family.getCircleType());
-            dto.setApplicantOpenId(vo.getOpenId());
-            dto.setStatus("approved");
-            return dto;
+            throw new IllegalArgumentException("已经在这个圈子里了，不需要重复加入");
         }
         CircleJoinRequest existing = circleJoinRequestMapper.selectOne(new LambdaQueryWrapper<CircleJoinRequest>()
                 .eq(CircleJoinRequest::getFamilyId, invite.getFamilyId())
