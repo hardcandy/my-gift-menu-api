@@ -75,10 +75,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         Family family = familyMapper.selectById(vo.getFamilyId());
         ValidatorUtil.checkNotNull(family, "圈子不存在");
         ValidatorUtil.checkArgument(isCircleMember(family.getId(), vo.getOpenId()), "只有圈内成员可以发布愿望");
-        String circleType = family.getCircleType();
-        String requesterRole = circleMemberRole(family, vo.getOpenId());
-        boolean needsReview = "family".equals(circleType) && isChildRole(requesterRole);
-        request.setStatus(needsReview ? GiftStatusEnum.PENDING_REVIEW.getCode() : GiftStatusEnum.OPEN.getCode());
+        request.setStatus(GiftStatusEnum.OPEN.getCode());
         request.setCreatedByOpenId(vo.getOpenId());
         request.setCreateTime(now);
         request.setModifyTime(now);
