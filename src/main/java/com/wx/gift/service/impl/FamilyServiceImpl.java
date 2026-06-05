@@ -201,7 +201,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         Family family = familyMapper.selectById(vo.getFamilyId());
         ValidatorUtil.checkNotNull(family, "圈子不存在");
-        ValidatorUtil.checkArgument(vo.getOpenId().equals(family.getOwnerOpenId()), "只有圈主可以生成邀请码");
+        ValidatorUtil.checkArgument(isCircleMember(vo.getFamilyId(), vo.getOpenId()), "只有圈内成员可以生成邀请码");
         Date now = new Date();
         circleInviteMapper.delete(new LambdaQueryWrapper<CircleInvite>().le(CircleInvite::getExpireTime, now));
         CircleInvite invite = new CircleInvite();
