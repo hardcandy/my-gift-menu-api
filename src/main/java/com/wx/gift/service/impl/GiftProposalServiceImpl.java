@@ -98,6 +98,19 @@ public class GiftProposalServiceImpl implements GiftProposalService {
         return changeStatus(vo, "canceled");
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean delete(GiftProposalVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getProposalId(), "proposalId 不能为空");
+        GiftProposal proposal = giftProposalMapper.selectById(vo.getProposalId());
+        ValidatorUtil.checkNotNull(proposal, "送礼清单不存在");
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(proposal.getSenderOpenId()), "只能删除自己发起的心意");
+        ValidatorUtil.checkArgument(isTerminal(proposal.getStatus()), "这份心意还在进行中，先收回再删除");
+        giftProposalMapper.deleteById(proposal.getId());
+        return true;
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public GiftProposalDTO changeStatus(GiftProposalVo vo, String status) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
@@ -141,6 +154,10 @@ public class GiftProposalServiceImpl implements GiftProposalService {
                 .last("limit 1")) != null;
     }
 
+    private boolean isTerminal(String status) {
+        return "confirmed".equals(status) || "rejected".equals(status) || "canceled".equals(status);
+    }
+
     private GiftProposalDTO toDto(GiftProposal proposal) {
         GiftProposalDTO dto = new GiftProposalDTO();
         BeanUtils.copyProperties(proposal, dto);
@@ -156,4 +173,3 @@ public class GiftProposalServiceImpl implements GiftProposalService {
         return status;
     }
 }
-

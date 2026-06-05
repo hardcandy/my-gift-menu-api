@@ -33,5 +33,7 @@ public class GiftProposalController {
 
     @RequestMapping("/cancel")
     public GiftProposalDTO cancel(@RequestBody GiftProposalVo vo) { return giftProposalService.cancel(vo); }
-}
 
+    @RequestMapping("/delete")
+    public Boolean delete(@RequestBody GiftProposalVo vo) { return giftProposalService.delete(vo); }
+}

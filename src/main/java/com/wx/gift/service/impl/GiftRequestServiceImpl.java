@@ -223,6 +223,20 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         return detail(request.getId());
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean delete(GiftActionVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getGiftRequestId(), "giftRequestId 不能为空");
+        GiftRequest request = require(vo.getGiftRequestId());
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(request.getCreatedByOpenId()) || vo.getOpenId().equals(request.getReceiverOpenId()), "只能删除自己的愿望");
+        ValidatorUtil.checkArgument(isWishTerminal(request.getStatus()), "这条愿望还在进行中，先藏起来再删除");
+        giftFeedbackMapper.delete(new LambdaQueryWrapper<GiftFeedback>().eq(GiftFeedback::getGiftRequestId, request.getId()));
+        auditLogMapper.delete(new LambdaQueryWrapper<AuditLog>().eq(AuditLog::getGiftRequestId, request.getId()));
+        giftRequestMapper.deleteById(request.getId());
+        return true;
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public GiftRequestDTO changeStatus(GiftActionVo vo, String from, String to, String action) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
@@ -327,6 +341,14 @@ public class GiftRequestServiceImpl implements GiftRequestService {
 
     private boolean isChildRole(String role) {
         return "child".equals(role) || "boy".equals(role) || "girl".equals(role);
+    }
+
+    private boolean isWishTerminal(String status) {
+        return GiftStatusEnum.CANCELED.getCode().equals(status)
+                || GiftStatusEnum.REJECTED.getCode().equals(status)
+                || GiftStatusEnum.FEEDBACK_DONE.getCode().equals(status)
+                || GiftStatusEnum.THANKED.getCode().equals(status)
+                || GiftStatusEnum.COMPLETED.getCode().equals(status);
     }
 
     private boolean isCircleMember(Integer familyId, String openId) {

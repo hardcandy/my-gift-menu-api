@@ -73,5 +73,9 @@ public class GiftRequestController {
     public GiftRequestDTO cancel(@RequestBody GiftActionVo vo) {
         return giftRequestService.cancel(vo);
     }
-}
 
+    @RequestMapping("/delete")
+    public Boolean delete(@RequestBody GiftActionVo vo) {
+        return giftRequestService.delete(vo);
+    }
+}

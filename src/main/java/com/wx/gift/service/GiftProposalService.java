@@ -12,5 +12,5 @@ public interface GiftProposalService {
     GiftProposalDTO confirm(GiftProposalVo vo);
     GiftProposalDTO reject(GiftProposalVo vo);
     GiftProposalDTO cancel(GiftProposalVo vo);
+    Boolean delete(GiftProposalVo vo);
 }
-
