@@ -203,11 +203,15 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         ValidatorUtil.checkArgument(isCircleMember(request.getFamilyId(), vo.getOpenId()), "只有圈内成员可以操作愿望");
         if (GiftStatusEnum.CLAIMED.getCode().equals(request.getStatus())) {
             ValidatorUtil.checkArgument(vo.getOpenId().equals(request.getClaimedByOpenId()) || vo.getOpenId().equals(request.getCreatedByOpenId()) || vo.getOpenId().equals(request.getReceiverOpenId()), "无权取消准备");
-            request.setStatus(GiftStatusEnum.OPEN.getCode());
-            request.setClaimedByOpenId(null);
-            request.setClaimedByName(null);
-            request.setClaimNote(null);
-            request.setClaimedAt(null);
+            if (vo.getOpenId().equals(request.getClaimedByOpenId())) {
+                request.setStatus(GiftStatusEnum.OPEN.getCode());
+                request.setClaimedByOpenId(null);
+                request.setClaimedByName(null);
+                request.setClaimNote(null);
+                request.setClaimedAt(null);
+            } else {
+                request.setStatus(GiftStatusEnum.CANCELED.getCode());
+            }
         } else {
             ValidatorUtil.checkArgument(vo.getOpenId().equals(request.getCreatedByOpenId()) || vo.getOpenId().equals(request.getReceiverOpenId()), "只能取消自己的愿望");
             ValidatorUtil.checkArgument(!GiftStatusEnum.CONFIRMED.getCode().equals(request.getStatus()) && !GiftStatusEnum.FEEDBACK_PENDING.getCode().equals(request.getStatus()) && !GiftStatusEnum.FEEDBACK_DONE.getCode().equals(request.getStatus()), "当前状态不可取消");
