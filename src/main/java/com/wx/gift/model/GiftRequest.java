@@ -26,6 +26,7 @@ public class GiftRequest {
     private String expectedDate;
     private String budget;
     private String productLink;
+    private String imageFileId;
     private String status;
     private String createdByOpenId;
     private String reviewerOpenId;
@@ -40,4 +41,3 @@ public class GiftRequest {
     private Date createTime;
     private Date modifyTime;
 }
-

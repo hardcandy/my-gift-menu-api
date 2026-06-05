@@ -22,6 +22,7 @@ public class GiftRequestDTO {
     private String expectedDate;
     private String budget;
     private String productLink;
+    private String imageFileId;
     private String status;
     private String statusText;
     private String createdByOpenId;
@@ -36,4 +37,3 @@ public class GiftRequestDTO {
     private Date createTime;
     private Date modifyTime;
 }
-

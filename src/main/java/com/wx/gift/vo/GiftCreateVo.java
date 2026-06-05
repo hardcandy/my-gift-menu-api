@@ -19,5 +19,5 @@ public class GiftCreateVo {
     private String expectedDate;
     private String budget;
     private String productLink;
+    private String imageFileId;
 }
-

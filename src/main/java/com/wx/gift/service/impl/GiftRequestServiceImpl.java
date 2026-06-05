@@ -72,6 +72,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         request.setExpectedDate(vo.getExpectedDate());
         request.setBudget(vo.getBudget());
         request.setProductLink(vo.getProductLink());
+        request.setImageFileId(vo.getImageFileId());
         Family family = familyMapper.selectById(vo.getFamilyId());
         ValidatorUtil.checkNotNull(family, "圈子不存在");
         ValidatorUtil.checkArgument(isCircleMember(family.getId(), vo.getOpenId()), "只有圈内成员可以发布愿望");
