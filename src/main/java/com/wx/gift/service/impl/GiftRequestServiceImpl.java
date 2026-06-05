@@ -131,9 +131,9 @@ public class GiftRequestServiceImpl implements GiftRequestService {
     public GiftRequestDTO claim(GiftActionVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         GiftRequest request = require(vo.getGiftRequestId());
-        ValidatorUtil.checkArgument(isCircleMember(request.getFamilyId(), vo.getOpenId()), "只有圈内成员可以认领愿望");
-        ValidatorUtil.checkArgument(GiftStatusEnum.OPEN.getCode().equals(request.getStatus()), "当前愿望不可认领");
-        ValidatorUtil.checkArgument(!vo.getOpenId().equals(request.getCreatedByOpenId()) && !vo.getOpenId().equals(request.getReceiverOpenId()), "不能认领自己的愿望");
+        ValidatorUtil.checkArgument(isCircleMember(request.getFamilyId(), vo.getOpenId()), "只有圈内成员可以准备这份心意");
+        ValidatorUtil.checkArgument(GiftStatusEnum.OPEN.getCode().equals(request.getStatus()), "这份心意现在还不能准备");
+        ValidatorUtil.checkArgument(!vo.getOpenId().equals(request.getCreatedByOpenId()) && !vo.getOpenId().equals(request.getReceiverOpenId()), "不能准备自己的愿望");
         request.setStatus(GiftStatusEnum.CLAIMED.getCode());
         request.setClaimedByOpenId(vo.getOpenId());
         request.setClaimedByName(StringUtils.defaultIfBlank(vo.getComment(), "亲友"));
@@ -204,7 +204,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         GiftRequest request = require(vo.getGiftRequestId());
         ValidatorUtil.checkArgument(isCircleMember(request.getFamilyId(), vo.getOpenId()), "只有圈内成员可以操作愿望");
         if (GiftStatusEnum.CLAIMED.getCode().equals(request.getStatus())) {
-            ValidatorUtil.checkArgument(vo.getOpenId().equals(request.getClaimedByOpenId()) || vo.getOpenId().equals(request.getCreatedByOpenId()) || vo.getOpenId().equals(request.getReceiverOpenId()), "无权取消认领");
+            ValidatorUtil.checkArgument(vo.getOpenId().equals(request.getClaimedByOpenId()) || vo.getOpenId().equals(request.getCreatedByOpenId()) || vo.getOpenId().equals(request.getReceiverOpenId()), "无权取消准备");
             request.setStatus(GiftStatusEnum.OPEN.getCode());
             request.setClaimedByOpenId(null);
             request.setClaimedByName(null);
@@ -269,7 +269,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
             ValidatorUtil.checkArgument(isParent(family.getId(), openId) && isCircleMember(family.getId(), openId), "只有家庭圈家长可以执行该操作");
         } else {
             ValidatorUtil.checkArgument(isCircleMember(family.getId(), openId), "只有圈内成员可以执行该操作");
-            ValidatorUtil.checkArgument(!openId.equals(request.getClaimedByOpenId()), "认领人不能自己确认认领");
+            ValidatorUtil.checkArgument(!openId.equals(request.getClaimedByOpenId()), "准备人不能自己确认");
         }
     }
 

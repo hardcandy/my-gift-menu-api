@@ -1,13 +1,13 @@
 package com.wx.gift.enums;
 
 public enum GiftStatusEnum {
-    PENDING_REVIEW("pending_review", "待审核"),
-    REJECTED("rejected", "审核未通过"),
-    OPEN("open", "可认领"),
-    CLAIMED("claimed", "已占位"),
-    CONFIRMED("confirmed", "已确认"),
+    PENDING_REVIEW("pending_review", "等家人看"),
+    REJECTED("rejected", "暂未通过"),
+    OPEN("open", "可准备"),
+    CLAIMED("claimed", "有人准备"),
+    CONFIRMED("confirmed", "准备中"),
     RECEIVED("received", "已收到"),
-    FEEDBACK_PENDING("feedback_pending", "待反馈"),
+    FEEDBACK_PENDING("feedback_pending", "等反馈"),
     FEEDBACK_DONE("feedback_done", "已反馈"),
     COMPLETED("completed", "已完成"),
     THANKED("thanked", "已感谢"),
@@ -29,4 +29,3 @@ public enum GiftStatusEnum {
         return text;
     }
 }
-
