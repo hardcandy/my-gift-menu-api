@@ -166,6 +166,33 @@ public class FamilyServiceImpl implements FamilyService {
                 .eq(FamilyMember::getMemberOpenId, vo.getMemberOpenId()));
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateMemberRole(FamilyJoinVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getMemberOpenId(), "memberOpenId 不能为空");
+        Family family = familyMapper.selectById(vo.getFamilyId());
+        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(family.getOwnerOpenId()), "只有圈主可以修改成员角色");
+        String role = memberRoleForJoin(family, vo.getRole());
+        Date now = new Date();
+        if (vo.getMemberOpenId().equals(family.getOwnerOpenId())) {
+            family.setOwnerRole(role);
+            family.setModifyTime(now);
+            familyMapper.updateById(family);
+            return;
+        }
+        FamilyMember member = familyMemberMapper.selectOne(new LambdaQueryWrapper<FamilyMember>()
+                .eq(FamilyMember::getFamilyId, vo.getFamilyId())
+                .eq(FamilyMember::getMemberOpenId, vo.getMemberOpenId())
+                .last("limit 1"));
+        ValidatorUtil.checkNotNull(member, "成员不存在");
+        member.setMemberRole(role);
+        member.setModifyTime(now);
+        familyMemberMapper.updateById(member);
+    }
+
 
     @Override
     @Transactional(rollbackFor = Exception.class)

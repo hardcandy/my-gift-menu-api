@@ -72,6 +72,12 @@ public class FamilyController {
         return true;
     }
 
+    @RequestMapping("/member/role/update")
+    public Boolean updateMemberRole(@RequestBody FamilyJoinVo vo) {
+        familyService.updateMemberRole(vo);
+        return true;
+    }
+
     @RequestMapping("/invite/generate")
     public CircleInviteDTO generateInvite(@RequestBody CircleInviteVo vo) {
         return familyService.generateInviteCode(vo);
