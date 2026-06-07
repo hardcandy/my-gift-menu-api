@@ -26,6 +26,9 @@ wx:
     getOpenId: /sns/jscode2session
     subscribeMessageSend: /cgi-bin/message/subscribe/send
 
+client:
+  miniProgramPathPrefix: ${MINI_PROGRAM_PATH_PREFIX:}
+
 okhttp:
   config:
     connectTimeout: 10
