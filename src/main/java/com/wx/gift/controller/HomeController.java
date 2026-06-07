@@ -21,6 +21,9 @@ public class HomeController {
     @Value("${client.miniProgramPathPrefix:}")
     private String miniProgramPathPrefix;
 
+    @Value("${client.miniProgramSharePath:}")
+    private String miniProgramSharePath;
+
     @RequestMapping("/userInfoByCode")
     public BaseUser getUserInfo(@RequestBody LoginVo vo) {
         return userService.login(vo);
@@ -34,9 +37,11 @@ public class HomeController {
     @RequestMapping("/clientConfig")
     public ClientConfigDTO clientConfig() {
         String prefix = StringUtils.trimWhitespace(miniProgramPathPrefix);
+        String sharePath = StringUtils.trimWhitespace(miniProgramSharePath);
         return ClientConfigDTO.builder()
                 .shareEnabled(StringUtils.hasText(prefix))
                 .miniProgramPathPrefix(prefix)
+                .miniProgramSharePath(sharePath)
                 .build();
     }
 }

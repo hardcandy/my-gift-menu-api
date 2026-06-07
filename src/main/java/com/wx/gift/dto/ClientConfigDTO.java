@@ -14,4 +14,5 @@ import lombok.experimental.Accessors;
 public class ClientConfigDTO {
     private boolean shareEnabled;
     private String miniProgramPathPrefix;
+    private String miniProgramSharePath;
 }

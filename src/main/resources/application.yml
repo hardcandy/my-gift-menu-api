@@ -28,6 +28,7 @@ wx:
 
 client:
   miniProgramPathPrefix: ${MINI_PROGRAM_PATH_PREFIX:}
+  miniProgramSharePath: ${MINI_PROGRAM_SHARE_PATH:}
 
 okhttp:
   config:
