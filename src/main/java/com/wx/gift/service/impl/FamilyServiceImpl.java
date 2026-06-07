@@ -321,7 +321,7 @@ public class FamilyServiceImpl implements FamilyService {
         request.setInviteCode(invite.getInviteCode());
         request.setApplicantOpenId(vo.getOpenId());
         request.setApplicantNickName(applicant == null ? "新成员" : applicant.getNickName());
-        request.setRequestedRole(memberRoleForJoin(family, vo.getRequestedRole()));
+        request.setRequestedRole("relative");
         request.setStatus("pending");
         request.setCreateTime(now);
         request.setModifyTime(now);
