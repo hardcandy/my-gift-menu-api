@@ -30,6 +30,8 @@ client:
   miniProgramPathPrefix: ${MINI_PROGRAM_PATH_PREFIX:}
   miniProgramSharePath: ${MINI_PROGRAM_SHARE_PATH:}
   rewardImageUrl: ${SUPPORT_REWARD_IMAGE_URL:}
+  supportCostItemsJson: ${SUPPORT_COST_ITEMS_JSON:}
+  supportersJson: ${SUPPORTERS_JSON:}
 
 okhttp:
   config:

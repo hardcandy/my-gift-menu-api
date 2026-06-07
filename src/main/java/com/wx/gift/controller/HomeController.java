@@ -27,6 +27,12 @@ public class HomeController {
     @Value("${client.rewardImageUrl:}")
     private String rewardImageUrl;
 
+    @Value("${client.supportCostItemsJson:}")
+    private String supportCostItemsJson;
+
+    @Value("${client.supportersJson:}")
+    private String supportersJson;
+
     @RequestMapping("/userInfoByCode")
     public BaseUser getUserInfo(@RequestBody LoginVo vo) {
         return userService.login(vo);
@@ -42,12 +48,16 @@ public class HomeController {
         String prefix = StringUtils.trimWhitespace(miniProgramPathPrefix);
         String sharePath = StringUtils.trimWhitespace(miniProgramSharePath);
         String rewardUrl = StringUtils.trimWhitespace(rewardImageUrl);
+        String costItems = StringUtils.trimWhitespace(supportCostItemsJson);
+        String supporters = StringUtils.trimWhitespace(supportersJson);
         return ClientConfigDTO.builder()
                 .shareEnabled(StringUtils.hasText(prefix))
                 .miniProgramPathPrefix(prefix)
                 .miniProgramSharePath(sharePath)
                 .rewardEnabled(StringUtils.hasText(rewardUrl))
                 .rewardImageUrl(rewardUrl)
+                .supportCostItemsJson(costItems)
+                .supportersJson(supporters)
                 .build();
     }
 }

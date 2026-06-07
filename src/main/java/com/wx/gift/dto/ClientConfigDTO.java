@@ -17,4 +17,6 @@ public class ClientConfigDTO {
     private String miniProgramSharePath;
     private boolean rewardEnabled;
     private String rewardImageUrl;
+    private String supportCostItemsJson;
+    private String supportersJson;
 }
