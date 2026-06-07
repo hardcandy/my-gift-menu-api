@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS t_gift_family (
   owner_role VARCHAR(32) NOT NULL DEFAULT 'parent',
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
-  INDEX idx_owner_open_id (owner_open_id)
+  INDEX idx_owner_open_id (owner_open_id),
+  INDEX idx_owner_open_id_id (owner_open_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS t_gift_child (
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS t_gift_child (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_family_id (family_id),
+  INDEX idx_family_id_id (family_id, id),
   INDEX idx_child_open_id (child_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -65,6 +67,9 @@ CREATE TABLE IF NOT EXISTS t_gift_request (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_family_id (family_id),
+  INDEX idx_family_id_id (family_id, id),
+  INDEX idx_family_status_id (family_id, status, id),
+  INDEX idx_family_claimed_id (family_id, claimed_by_open_id, id),
   INDEX idx_child_id (child_id),
   INDEX idx_status (status),
   INDEX idx_claimed_by_open_id (claimed_by_open_id)
@@ -89,7 +94,9 @@ CREATE TABLE IF NOT EXISTS t_gift_family_member (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   UNIQUE KEY uk_family_member (family_id, member_open_id),
-  INDEX idx_member_open_id (member_open_id)
+  INDEX idx_member_open_id (member_open_id),
+  INDEX idx_member_open_id_id (member_open_id, id),
+  INDEX idx_family_id_id (family_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS t_gift_feedback (
@@ -131,6 +138,8 @@ CREATE TABLE IF NOT EXISTS t_gift_circle_join_request (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_family_status (family_id, status),
+  INDEX idx_family_status_id (family_id, status, id),
+  INDEX idx_family_applicant_status (family_id, applicant_open_id, status),
   INDEX idx_applicant_open_id (applicant_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -167,6 +176,9 @@ CREATE TABLE IF NOT EXISTS t_gift_proposal (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_family_id (family_id),
+  INDEX idx_family_id_id (family_id, id),
+  INDEX idx_family_sender_id (family_id, sender_open_id, id),
+  INDEX idx_family_receiver_id (family_id, receiver_open_id, id),
   INDEX idx_sender_open_id (sender_open_id),
   INDEX idx_receiver_open_id (receiver_open_id),
   INDEX idx_status (status)
