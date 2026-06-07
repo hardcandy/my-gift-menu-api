@@ -15,4 +15,6 @@ public class ClientConfigDTO {
     private boolean shareEnabled;
     private String miniProgramPathPrefix;
     private String miniProgramSharePath;
+    private boolean rewardEnabled;
+    private String rewardImageUrl;
 }

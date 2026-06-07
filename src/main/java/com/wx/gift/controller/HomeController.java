@@ -24,6 +24,9 @@ public class HomeController {
     @Value("${client.miniProgramSharePath:}")
     private String miniProgramSharePath;
 
+    @Value("${client.rewardImageUrl:}")
+    private String rewardImageUrl;
+
     @RequestMapping("/userInfoByCode")
     public BaseUser getUserInfo(@RequestBody LoginVo vo) {
         return userService.login(vo);
@@ -38,10 +41,13 @@ public class HomeController {
     public ClientConfigDTO clientConfig() {
         String prefix = StringUtils.trimWhitespace(miniProgramPathPrefix);
         String sharePath = StringUtils.trimWhitespace(miniProgramSharePath);
+        String rewardUrl = StringUtils.trimWhitespace(rewardImageUrl);
         return ClientConfigDTO.builder()
                 .shareEnabled(StringUtils.hasText(prefix))
                 .miniProgramPathPrefix(prefix)
                 .miniProgramSharePath(sharePath)
+                .rewardEnabled(StringUtils.hasText(rewardUrl))
+                .rewardImageUrl(rewardUrl)
                 .build();
     }
 }
