@@ -2,9 +2,11 @@ package com.wx.gift.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wx.gift.dto.GiftRequestDTO;
+import com.wx.gift.dto.GiftRequestMessageDTO;
 import com.wx.gift.enums.GiftStatusEnum;
 import com.wx.gift.mapper.AuditLogMapper;
 import com.wx.gift.mapper.ChildMapper;
+import com.wx.gift.mapper.GiftRequestMessageMapper;
 import com.wx.gift.mapper.GiftRequestMapper;
 import com.wx.gift.mapper.GiftFeedbackMapper;
 import com.wx.gift.mapper.FamilyMapper;
@@ -13,6 +15,7 @@ import com.wx.gift.mapper.FamilyMemberMapper;
 import com.wx.gift.model.AuditLog;
 import com.wx.gift.model.Child;
 import com.wx.gift.model.GiftRequest;
+import com.wx.gift.model.GiftRequestMessage;
 import com.wx.gift.model.GiftFeedback;
 import com.wx.gift.model.Family;
 import com.wx.gift.model.BaseUser;
@@ -44,6 +47,8 @@ public class GiftRequestServiceImpl implements GiftRequestService {
     private AuditLogMapper auditLogMapper;
     @Autowired
     private GiftFeedbackMapper giftFeedbackMapper;
+    @Autowired
+    private GiftRequestMessageMapper giftRequestMessageMapper;
     @Autowired
     private FamilyMapper familyMapper;
     @Autowired
@@ -237,6 +242,25 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         return true;
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public GiftRequestDTO addMessage(GiftActionVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getGiftRequestId(), "giftRequestId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getComment(), "留言不能为空");
+        GiftRequest request = require(vo.getGiftRequestId());
+        ValidatorUtil.checkArgument(isCircleMember(request.getFamilyId(), vo.getOpenId()), "只有圈内成员可以留言");
+        Date now = new Date();
+        GiftRequestMessage message = new GiftRequestMessage();
+        message.setGiftRequestId(request.getId());
+        message.setOpenId(vo.getOpenId());
+        message.setNickName(StringUtils.defaultIfBlank(vo.getNickName(), "亲友"));
+        message.setContent(StringUtils.abbreviate(vo.getComment(), 512));
+        message.setCreateTime(now);
+        giftRequestMessageMapper.insert(message);
+        return detail(request.getId());
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public GiftRequestDTO changeStatus(GiftActionVo vo, String from, String to, String action) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
@@ -413,6 +437,17 @@ public class GiftRequestServiceImpl implements GiftRequestService {
             dto.setFeedbackPreference(feedback.getPreference());
             dto.setFeedbackParentNote(feedback.getParentNote());
         }
+        dto.setMessages(giftRequestMessageMapper.selectList(new LambdaQueryWrapper<GiftRequestMessage>()
+                        .eq(GiftRequestMessage::getGiftRequestId, request.getId())
+                        .orderByDesc(GiftRequestMessage::getId)
+                        .last("limit 30"))
+                .stream().map(this::toMessageDto).collect(Collectors.toList()));
+        return dto;
+    }
+
+    private GiftRequestMessageDTO toMessageDto(GiftRequestMessage message) {
+        GiftRequestMessageDTO dto = new GiftRequestMessageDTO();
+        BeanUtils.copyProperties(message, dto);
         return dto;
     }
 

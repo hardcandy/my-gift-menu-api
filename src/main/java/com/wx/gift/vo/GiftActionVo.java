@@ -10,5 +10,5 @@ public class GiftActionVo {
     private Integer giftRequestId;
     private String comment;
     private String claimNote;
+    private String nickName;
 }
-

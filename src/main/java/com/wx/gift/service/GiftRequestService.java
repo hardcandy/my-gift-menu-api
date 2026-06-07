@@ -21,5 +21,6 @@ public interface GiftRequestService {
     GiftRequestDTO thank(GiftActionVo vo);
     GiftRequestDTO feedback(GiftFeedbackVo vo);
     GiftRequestDTO cancel(GiftActionVo vo);
+    GiftRequestDTO addMessage(GiftActionVo vo);
     Boolean delete(GiftActionVo vo);
 }

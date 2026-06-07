@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.Date;
+import java.util.List;
 
 @Getter
 @Setter
@@ -34,6 +35,7 @@ public class GiftRequestDTO {
     private String feedbackMessage;
     private String feedbackPreference;
     private String feedbackParentNote;
+    private List<GiftRequestMessageDTO> messages;
     private Date createTime;
     private Date modifyTime;
 }
