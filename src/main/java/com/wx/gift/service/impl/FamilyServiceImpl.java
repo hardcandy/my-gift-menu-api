@@ -71,6 +71,7 @@ public class FamilyServiceImpl implements FamilyService {
         family.setOwnerRole(StringUtils.defaultIfBlank(normalizeMemberRole(ownerRole), "relative"));
         family.setFamilyName(StringUtils.defaultIfBlank(vo.getFamilyName(), "我的圈子"));
         family.setCircleType(circleType);
+        family.setStatus("active");
         family.setCreateTime(now);
         family.setModifyTime(now);
         familyMapper.insert(family);
@@ -81,14 +82,17 @@ public class FamilyServiceImpl implements FamilyService {
     public List<Map<String, Object>> listFamilies(String openId) {
         ValidatorUtil.checkNotBlank(openId, "openId 不能为空");
         List<Map<String, Object>> result = new java.util.ArrayList<>();
-        List<Family> owned = familyMapper.selectList(new LambdaQueryWrapper<Family>().eq(Family::getOwnerOpenId, openId).orderByDesc(Family::getId));
+        List<Family> owned = familyMapper.selectList(new LambdaQueryWrapper<Family>()
+                .eq(Family::getOwnerOpenId, openId)
+                .eq(Family::getStatus, "active")
+                .orderByDesc(Family::getId));
         for (Family family : owned) {
             result.add(toFamilyMap(family, "owner", ownerRole(family)));
         }
         List<FamilyMember> memberships = familyMemberMapper.selectList(new LambdaQueryWrapper<FamilyMember>().eq(FamilyMember::getMemberOpenId, openId).orderByDesc(FamilyMember::getId));
         for (FamilyMember member : memberships) {
             Family family = familyMapper.selectById(member.getFamilyId());
-            if (family != null && !openId.equals(family.getOwnerOpenId())) {
+            if (isActiveFamily(family) && !openId.equals(family.getOwnerOpenId())) {
                 result.add(toFamilyMap(family, "member", StringUtils.defaultIfBlank(member.getMemberRole(), "relative")));
             }
         }
@@ -97,18 +101,23 @@ public class FamilyServiceImpl implements FamilyService {
 
     @Override
     public Family getFamilyByOpenId(String openId) {
-        Family owned = familyMapper.selectOne(new LambdaQueryWrapper<Family>().eq(Family::getOwnerOpenId, openId).last("limit 1"));
+        Family owned = familyMapper.selectOne(new LambdaQueryWrapper<Family>()
+                .eq(Family::getOwnerOpenId, openId)
+                .eq(Family::getStatus, "active")
+                .last("limit 1"));
         if (owned != null) {
             return owned;
         }
         FamilyMember member = familyMemberMapper.selectOne(new LambdaQueryWrapper<FamilyMember>().eq(FamilyMember::getMemberOpenId, openId).last("limit 1"));
-        return member == null ? null : familyMapper.selectById(member.getFamilyId());
+        Family family = member == null ? null : familyMapper.selectById(member.getFamilyId());
+        return isActiveFamily(family) ? family : null;
     }
 
     @Override
     public Family getFamilyById(Integer familyId) {
         ValidatorUtil.checkNotNull(familyId, "familyId 不能为空");
-        return familyMapper.selectById(familyId);
+        Family family = familyMapper.selectById(familyId);
+        return isActiveFamily(family) ? family : null;
     }
 
     @Override
@@ -117,7 +126,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         Family family = familyMapper.selectById(vo.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "家庭不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "家庭不存在");
         if (vo.getOpenId().equals(family.getOwnerOpenId())) {
             return family;
         }
@@ -144,11 +153,24 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         Family family = familyMapper.selectById(vo.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         ValidatorUtil.checkArgument(!vo.getOpenId().equals(family.getOwnerOpenId()), "圈主不能直接退出自己创建的圈子");
         familyMemberMapper.delete(new LambdaQueryWrapper<FamilyMember>()
                 .eq(FamilyMember::getFamilyId, vo.getFamilyId())
                 .eq(FamilyMember::getMemberOpenId, vo.getOpenId()));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteFamily(FamilyJoinVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        Family family = familyMapper.selectById(vo.getFamilyId());
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(family.getOwnerOpenId()), "只有圈主可以删除圈子");
+        family.setStatus("deleted");
+        family.setModifyTime(new Date());
+        familyMapper.updateById(family);
     }
 
     @Override
@@ -158,7 +180,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         ValidatorUtil.checkNotBlank(vo.getMemberOpenId(), "memberOpenId 不能为空");
         Family family = familyMapper.selectById(vo.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         ValidatorUtil.checkArgument(vo.getOpenId().equals(family.getOwnerOpenId()), "只有圈主可以删除成员");
         ValidatorUtil.checkArgument(!vo.getMemberOpenId().equals(family.getOwnerOpenId()), "不能删除圈主");
         familyMemberMapper.delete(new LambdaQueryWrapper<FamilyMember>()
@@ -173,7 +195,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         ValidatorUtil.checkNotBlank(vo.getMemberOpenId(), "memberOpenId 不能为空");
         Family family = familyMapper.selectById(vo.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         ValidatorUtil.checkArgument(vo.getOpenId().equals(family.getOwnerOpenId()), "只有圈主可以修改成员角色");
         String role = memberRoleForJoin(family, vo.getRole());
         Date now = new Date();
@@ -200,7 +222,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         Family family = familyMapper.selectById(vo.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         ValidatorUtil.checkArgument(isCircleMember(vo.getFamilyId(), vo.getOpenId()), "只有圈内成员可以生成邀请码");
         Date now = new Date();
         circleInviteMapper.delete(new LambdaQueryWrapper<CircleInvite>().le(CircleInvite::getExpireTime, now));
@@ -220,7 +242,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotBlank(vo.getInviteCode(), "邀请码不能为空");
         CircleInvite invite = getValidInvite(vo.getInviteCode());
         Family family = familyMapper.selectById(invite.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         return toInviteDto(invite, family);
     }
 
@@ -231,7 +253,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotBlank(vo.getInviteCode(), "邀请码不能为空");
         CircleInvite invite = getValidInvite(vo.getInviteCode());
         Family family = familyMapper.selectById(invite.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         FamilyJoinVo joinVo = new FamilyJoinVo();
         joinVo.setOpenId(vo.getOpenId());
         joinVo.setFamilyId(invite.getFamilyId());
@@ -280,7 +302,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotBlank(vo.getInviteCode(), "邀请码不能为空");
         CircleInvite invite = getValidInvite(vo.getInviteCode());
         Family family = familyMapper.selectById(invite.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         if (vo.getOpenId().equals(family.getOwnerOpenId()) || isCircleMember(invite.getFamilyId(), vo.getOpenId())) {
             throw new IllegalArgumentException("已经在这个圈子里了，不需要重复加入");
         }
@@ -385,7 +407,7 @@ public class FamilyServiceImpl implements FamilyService {
 
     private boolean canApprove(Integer familyId, String openId) {
         Family family = familyMapper.selectById(familyId);
-        if (family == null) {
+        if (!isActiveFamily(family)) {
             return false;
         }
         return openId.equals(family.getOwnerOpenId()) || isCircleMember(familyId, openId);
@@ -393,7 +415,10 @@ public class FamilyServiceImpl implements FamilyService {
 
     private boolean isCircleMember(Integer familyId, String openId) {
         Family family = familyMapper.selectById(familyId);
-        if (family != null && openId.equals(family.getOwnerOpenId())) {
+        if (!isActiveFamily(family)) {
+            return false;
+        }
+        if (openId.equals(family.getOwnerOpenId())) {
             return true;
         }
         return familyMemberMapper.selectOne(new LambdaQueryWrapper<FamilyMember>()
@@ -428,7 +453,7 @@ public class FamilyServiceImpl implements FamilyService {
             targetFamilyId = current.getId();
         }
         Family family = familyMapper.selectById(targetFamilyId);
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         ValidatorUtil.checkArgument(canApprove(targetFamilyId, openId), "只有圈内成员可以查看成员");
         List<Map<String, Object>> members = new java.util.ArrayList<>();
         members.add(toMemberMap(family.getOwnerOpenId(), ownerRole(family), true));
@@ -470,6 +495,7 @@ public class FamilyServiceImpl implements FamilyService {
             familySaveVo.setOpenId(vo.getOpenId());
             family = ensureFamily(familySaveVo);
         }
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         Date now = new Date();
         Child child = new Child();
         child.setFamilyId(family.getId());
@@ -495,5 +521,9 @@ public class FamilyServiceImpl implements FamilyService {
             targetFamilyId = family.getId();
         }
         return childMapper.selectList(new LambdaQueryWrapper<Child>().eq(Child::getFamilyId, targetFamilyId).orderByDesc(Child::getId));
+    }
+
+    private boolean isActiveFamily(Family family) {
+        return family != null && !"deleted".equals(family.getStatus());
     }
 }

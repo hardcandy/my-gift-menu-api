@@ -74,7 +74,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         request.setProductLink(vo.getProductLink());
         request.setImageFileId(vo.getImageFileId());
         Family family = familyMapper.selectById(vo.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         ValidatorUtil.checkArgument(isCircleMember(family.getId(), vo.getOpenId()), "只有圈内成员可以发布愿望");
         request.setStatus(GiftStatusEnum.OPEN.getCode());
         request.setCreatedByOpenId(vo.getOpenId());
@@ -268,7 +268,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         ValidatorUtil.checkNotBlank(openId, "openId 不能为空");
         GiftRequest request = require(giftRequestId);
         Family family = familyMapper.selectById(request.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         if ("family".equals(family.getCircleType())) {
             ValidatorUtil.checkArgument(isParent(family.getId(), openId) && isCircleMember(family.getId(), openId), "只有家庭圈家长可以执行该操作");
         } else {
@@ -280,7 +280,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         ValidatorUtil.checkNotBlank(openId, "openId 不能为空");
         GiftRequest request = require(giftRequestId);
         Family family = familyMapper.selectById(request.getFamilyId());
-        ValidatorUtil.checkNotNull(family, "圈子不存在");
+        ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
         if ("family".equals(family.getCircleType())) {
             ValidatorUtil.checkArgument(isParent(family.getId(), openId) && isCircleMember(family.getId(), openId), "只有家庭圈家长可以执行该操作");
         } else {
@@ -297,7 +297,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
     }
 
     private String circleMemberRole(Family family, String openId) {
-        if (family == null || org.apache.commons.lang3.StringUtils.isBlank(openId)) {
+        if (!isActiveFamily(family) || org.apache.commons.lang3.StringUtils.isBlank(openId)) {
             return "relative";
         }
         if (openId.equals(family.getOwnerOpenId())) {
@@ -316,7 +316,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
 
     private boolean isParent(Integer familyId, String openId) {
         Family family = familyMapper.selectById(familyId);
-        if (family == null || org.apache.commons.lang3.StringUtils.isBlank(openId)) {
+        if (!isActiveFamily(family) || org.apache.commons.lang3.StringUtils.isBlank(openId)) {
             return false;
         }
         if (openId.equals(family.getOwnerOpenId())) {
@@ -356,7 +356,7 @@ public class GiftRequestServiceImpl implements GiftRequestService {
             return false;
         }
         Family family = familyMapper.selectById(familyId);
-        if (family == null) {
+        if (!isActiveFamily(family)) {
             return false;
         }
         if (openId.equals(family.getOwnerOpenId())) {
@@ -373,6 +373,10 @@ public class GiftRequestServiceImpl implements GiftRequestService {
         GiftRequest request = giftRequestMapper.selectById(id);
         ValidatorUtil.checkNotNull(request, "愿望不存在");
         return request;
+    }
+
+    private boolean isActiveFamily(Family family) {
+        return family != null && !"deleted".equals(family.getStatus());
     }
 
     private void log(Integer giftRequestId, String openId, String action, String comment) {

@@ -19,10 +19,12 @@ CREATE TABLE IF NOT EXISTS t_gift_family (
   circle_type VARCHAR(32) NOT NULL DEFAULT 'family',
   owner_open_id VARCHAR(128) NOT NULL,
   owner_role VARCHAR(32) NOT NULL DEFAULT 'parent',
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_owner_open_id (owner_open_id),
-  INDEX idx_owner_open_id_id (owner_open_id, id)
+  INDEX idx_owner_open_id_id (owner_open_id, id),
+  INDEX idx_owner_status_id (owner_open_id, status, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS t_gift_child (

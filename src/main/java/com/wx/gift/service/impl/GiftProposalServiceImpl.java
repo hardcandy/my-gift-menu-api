@@ -142,7 +142,7 @@ public class GiftProposalServiceImpl implements GiftProposalService {
             return false;
         }
         Family family = familyMapper.selectById(familyId);
-        if (family == null) {
+        if (!isActiveFamily(family)) {
             return false;
         }
         if (openId.equals(family.getOwnerOpenId())) {
@@ -156,6 +156,10 @@ public class GiftProposalServiceImpl implements GiftProposalService {
 
     private boolean isTerminal(String status) {
         return "confirmed".equals(status) || "rejected".equals(status) || "canceled".equals(status);
+    }
+
+    private boolean isActiveFamily(Family family) {
+        return family != null && !"deleted".equals(family.getStatus());
     }
 
     private GiftProposalDTO toDto(GiftProposal proposal) {

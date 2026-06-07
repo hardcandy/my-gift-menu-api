@@ -18,7 +18,7 @@ public class Family {
     private String circleType;
     private String ownerOpenId;
     private String ownerRole;
+    private String status;
     private Date createTime;
     private Date modifyTime;
 }
-

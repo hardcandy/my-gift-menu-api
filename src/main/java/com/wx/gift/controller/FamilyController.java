@@ -66,6 +66,12 @@ public class FamilyController {
         return true;
     }
 
+    @RequestMapping("/delete")
+    public Boolean delete(@RequestBody FamilyJoinVo vo) {
+        familyService.deleteFamily(vo);
+        return true;
+    }
+
     @RequestMapping("/member/remove")
     public Boolean removeMember(@RequestBody FamilyJoinVo vo) {
         familyService.removeMember(vo);

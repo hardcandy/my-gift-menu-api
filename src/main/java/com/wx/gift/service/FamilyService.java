@@ -21,6 +21,7 @@ public interface FamilyService {
     Family getFamilyById(Integer familyId);
     Family joinFamily(FamilyJoinVo vo);
     void leaveFamily(FamilyJoinVo vo);
+    void deleteFamily(FamilyJoinVo vo);
     void removeMember(FamilyJoinVo vo);
     void updateMemberRole(FamilyJoinVo vo);
     CircleInviteDTO generateInviteCode(CircleInviteVo vo);
