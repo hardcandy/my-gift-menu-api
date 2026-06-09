@@ -49,6 +49,11 @@
 - `/game/save`：新增或编辑游戏
 - `/game/delete`：软删除游戏
 - `/game/play`：记录一次游玩，并更新最近玩的人和最近游玩时间
+- `/restaurant/list`：餐厅列表
+- `/restaurant/detail`：餐厅详情
+- `/restaurant/save`：新增或编辑餐厅
+- `/restaurant/delete`：软删除餐厅
+- `/restaurant/visit`：记录一次就餐和多人评分
 
 ## SQL
 
@@ -64,10 +69,19 @@ source sql/schema.sql;
 source sql/20260609_add_game_library.sql;
 ```
 
+已有环境升级「美食之选」模块执行：
+
+```sql
+source sql/20260609_add_restaurant_choice.sql;
+```
+
 新增表：
 
 - `t_gift_game`
 - `t_gift_game_play_log`
+- `t_gift_restaurant`
+- `t_gift_restaurant_visit`
+- `t_gift_restaurant_score`
 
 ## 配置
 
