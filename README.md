@@ -1,11 +1,6 @@
-# wxcloudrun-springboot
-[![GitHub license](https://img.shields.io/github/license/WeixinCloud/wxcloudrun-express)](https://github.com/WeixinCloud/wxcloudrun-express)
-![GitHub package.json dependency version (prod)](https://img.shields.io/badge/maven-3.6.0-green)
-![GitHub package.json dependency version (prod)](https://img.shields.io/badge/jdk-11-green)
+# 心意清单后端
 
-微信云托管 Java Springboot 框架模版，实现简单的计数器读写接口，使用云托管 MySQL 读写、记录计数值。
-
-![](https://qcloudimg.tencent-cloud.cn/raw/be22992d297d1b9a1a5365e606276781.png)
+微信云托管 Java Spring Boot 服务，负责「心意清单」小程序的圈子、愿望、送礼提案、反馈、订阅消息和生活模块数据。
 
 
 ## 快速开始
@@ -39,75 +34,44 @@
 ~~~
 
 
-## 服务 API 文档
+## 业务 API
 
-### `GET /api/count`
+所有接口均挂在 `/gift-menu-api` 下，使用 `POST` JSON 请求。
 
-获取当前计数
+- `/home/userInfoByCode`：登录和资料初始化
+- `/family/*`：圈子、成员、邀请码、加入申请和孩子资料
+- `/gift/*`：愿望创建、审核、认领、确认、完成、感谢和留言
+- `/proposal/*`：送礼提案创建、确认、拒绝和取消
+- `/feedback/submit`：应用反馈
+- `/subscription/save`：订阅消息授权记录
+- `/game/list`：游戏库列表
+- `/game/detail`：游戏详情
+- `/game/save`：新增或编辑游戏
+- `/game/delete`：软删除游戏
+- `/game/play`：记录一次游玩，并更新最近玩的人和最近游玩时间
 
-#### 请求参数
+## SQL
 
-无
+全新环境执行：
 
-#### 响应结果
-
-- `code`：错误码
-- `data`：当前计数值
-
-##### 响应结果示例
-
-```json
-{
-  "code": 0,
-  "data": 42
-}
+```sql
+source sql/schema.sql;
 ```
 
-#### 调用示例
+已有环境升级「我的游戏」模块执行：
 
-```
-curl https://<云托管服务域名>/api/count
-```
-
-
-
-### `POST /api/count`
-
-更新计数，自增或者清零
-
-#### 请求参数
-
-- `action`：`string` 类型，枚举值
-  - 等于 `"inc"` 时，表示计数加一
-  - 等于 `"clear"` 时，表示计数重置（清零）
-
-##### 请求参数示例
-
-```
-{
-  "action": "inc"
-}
+```sql
+source sql/20260609_add_game_library.sql;
 ```
 
-#### 响应结果
+新增表：
 
-- `code`：错误码
-- `data`：当前计数值
+- `t_gift_game`
+- `t_gift_game_play_log`
 
-##### 响应结果示例
+## 配置
 
-```json
-{
-  "code": 0,
-  "data": 42
-}
-```
-
-#### 调用示例
-
-```
-curl -X POST -H 'content-type: application/json' -d '{"action": "inc"}' https://<云托管服务域名>/api/count
-```
+基础数据库和微信配置见 `src/main/resources/application.yml`。当前「我的游戏」模块不需要新增后端环境变量。
 
 ## 使用注意
 如果不是通过微信云托管控制台部署模板代码，而是自行复制/下载模板代码后，手动新建一个服务并部署，需要在「服务设置」中补全以下环境变量，才可正常使用，否则会引发无法连接数据库，进而导致部署失败。
