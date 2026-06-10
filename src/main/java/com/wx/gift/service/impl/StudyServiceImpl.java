@@ -240,6 +240,7 @@ public class StudyServiceImpl implements StudyService {
         record.setSubject(vo.getSubject());
         record.setItemId(item.getId());
         record.setItemName(item.getName());
+        record.setContentTitle(StringUtils.defaultString(vo.getContentTitle()));
         record.setRecordDate(vo.getRecordDate() == null ? now : vo.getRecordDate());
         record.setScoreType(StringUtils.defaultIfBlank(vo.getScoreType(), "text"));
         record.setScoreValue(StringUtils.defaultString(vo.getScoreValue()));

@@ -17,6 +17,7 @@ public class StudyRecordVo {
     private String grade;
     private String subject;
     private Integer itemId;
+    private String contentTitle;
     private Date recordDate;
     private String scoreType;
     private String scoreValue;

@@ -21,6 +21,7 @@ public class StudyRecord {
     private String subject;
     private Integer itemId;
     private String itemName;
+    private String contentTitle;
     private Date recordDate;
     private String scoreType;
     private String scoreValue;

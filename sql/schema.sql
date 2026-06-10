@@ -343,6 +343,7 @@ CREATE TABLE IF NOT EXISTS t_gift_study_record (
   subject VARCHAR(64) NOT NULL,
   item_id INT NOT NULL,
   item_name VARCHAR(128) NOT NULL,
+  content_title VARCHAR(128),
   record_date DATETIME NOT NULL,
   score_type VARCHAR(32) NOT NULL DEFAULT 'text',
   score_value VARCHAR(128),
