@@ -2,9 +2,11 @@ package com.wx.gift.controller;
 
 import com.wx.gift.dto.StudyItemDTO;
 import com.wx.gift.dto.StudyRecordDTO;
+import com.wx.gift.dto.StudySubjectDTO;
 import com.wx.gift.service.StudyService;
 import com.wx.gift.vo.StudyItemVo;
 import com.wx.gift.vo.StudyRecordVo;
+import com.wx.gift.vo.StudySubjectVo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +20,15 @@ import java.util.Map;
 public class StudyController {
     @Autowired
     private StudyService studyService;
+
+    @RequestMapping("/subject/list")
+    public List<StudySubjectDTO> listSubjects(@RequestBody StudySubjectVo vo) { return studyService.listSubjects(vo); }
+
+    @RequestMapping("/subject/save")
+    public StudySubjectDTO saveSubject(@RequestBody StudySubjectVo vo) { return studyService.saveSubject(vo); }
+
+    @RequestMapping("/subject/delete")
+    public Boolean deleteSubject(@RequestBody StudySubjectVo vo) { return studyService.deleteSubject(vo); }
 
     @RequestMapping("/item/list")
     public List<StudyItemDTO> listItems(@RequestBody StudyItemVo vo) { return studyService.listItems(vo); }

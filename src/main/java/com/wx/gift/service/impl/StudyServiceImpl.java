@@ -3,20 +3,24 @@ package com.wx.gift.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wx.gift.dto.StudyItemDTO;
 import com.wx.gift.dto.StudyRecordDTO;
+import com.wx.gift.dto.StudySubjectDTO;
 import com.wx.gift.mapper.ChildMapper;
 import com.wx.gift.mapper.FamilyMapper;
 import com.wx.gift.mapper.FamilyMemberMapper;
 import com.wx.gift.mapper.StudyItemMapper;
 import com.wx.gift.mapper.StudyRecordMapper;
+import com.wx.gift.mapper.StudySubjectMapper;
 import com.wx.gift.model.Child;
 import com.wx.gift.model.Family;
 import com.wx.gift.model.FamilyMember;
 import com.wx.gift.model.StudyItem;
 import com.wx.gift.model.StudyRecord;
+import com.wx.gift.model.StudySubject;
 import com.wx.gift.service.StudyService;
 import com.wx.gift.util.ValidatorUtil;
 import com.wx.gift.vo.StudyItemVo;
 import com.wx.gift.vo.StudyRecordVo;
+import com.wx.gift.vo.StudySubjectVo;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,11 +50,69 @@ public class StudyServiceImpl implements StudyService {
     @Autowired
     private StudyRecordMapper studyRecordMapper;
     @Autowired
+    private StudySubjectMapper studySubjectMapper;
+    @Autowired
     private FamilyMapper familyMapper;
     @Autowired
     private FamilyMemberMapper familyMemberMapper;
     @Autowired
     private ChildMapper childMapper;
+
+    @Override
+    public List<StudySubjectDTO> listSubjects(StudySubjectVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        return studySubjectMapper.selectList(new LambdaQueryWrapper<StudySubject>()
+                        .eq(StudySubject::getFamilyId, vo.getFamilyId())
+                        .ne(StudySubject::getStatus, "deleted")
+                        .orderByAsc(StudySubject::getSortOrder)
+                        .orderByDesc(StudySubject::getId))
+                .stream().map(this::toSubjectDto).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public StudySubjectDTO saveSubject(StudySubjectVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getName(), "学科名称不能为空");
+        requireStudyManager(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        StudySubject subject;
+        if (vo.getSubjectId() == null) {
+            subject = new StudySubject();
+            subject.setFamilyId(vo.getFamilyId());
+            subject.setOwnerOpenId(vo.getOpenId());
+            subject.setStatus("active");
+            subject.setCreateTime(now);
+        } else {
+            subject = studySubjectMapper.selectById(vo.getSubjectId());
+            ValidatorUtil.checkArgument(subject != null && !"deleted".equals(subject.getStatus()), "学科不存在");
+            ValidatorUtil.checkArgument(Objects.equals(subject.getFamilyId(), vo.getFamilyId()), "学科不在当前圈子");
+        }
+        subject.setName(vo.getName());
+        subject.setGradeScope(StringUtils.defaultIfBlank(vo.getGradeScope(), "全部"));
+        subject.setSortOrder(vo.getSortOrder() == null ? 100 : vo.getSortOrder());
+        subject.setModifyTime(now);
+        if (subject.getId() == null) studySubjectMapper.insert(subject);
+        else studySubjectMapper.updateById(subject);
+        return toSubjectDto(studySubjectMapper.selectById(subject.getId()));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean deleteSubject(StudySubjectVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getSubjectId(), "subjectId 不能为空");
+        StudySubject subject = studySubjectMapper.selectById(vo.getSubjectId());
+        ValidatorUtil.checkArgument(subject != null && !"deleted".equals(subject.getStatus()), "学科不存在");
+        requireStudyManager(subject.getFamilyId(), vo.getOpenId());
+        subject.setStatus("deleted");
+        subject.setModifyTime(new Date());
+        studySubjectMapper.updateById(subject);
+        return true;
+    }
 
     @Override
     public List<StudyItemDTO> listItems(StudyItemVo vo) {
@@ -411,6 +473,12 @@ public class StudyServiceImpl implements StudyService {
     private StudyItemDTO toItemDto(StudyItem item) {
         StudyItemDTO dto = new StudyItemDTO();
         BeanUtils.copyProperties(item, dto);
+        return dto;
+    }
+
+    private StudySubjectDTO toSubjectDto(StudySubject subject) {
+        StudySubjectDTO dto = new StudySubjectDTO();
+        BeanUtils.copyProperties(subject, dto);
         return dto;
     }
 
