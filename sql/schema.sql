@@ -299,3 +299,48 @@ CREATE TABLE IF NOT EXISTS t_gift_restaurant_score (
   INDEX idx_visit_id (visit_id),
   INDEX idx_family_scorer (family_id, scorer_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_gift_study_item (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  family_id INT NOT NULL,
+  owner_open_id VARCHAR(128) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  subject_scope VARCHAR(128) NOT NULL DEFAULT '全部',
+  grade_scope VARCHAR(128) NOT NULL DEFAULT '全部',
+  field_config TEXT,
+  correction_enabled TINYINT NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 100,
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  create_time DATETIME NOT NULL,
+  modify_time DATETIME NOT NULL,
+  INDEX idx_family_status_sort (family_id, status, sort_order),
+  INDEX idx_owner_open_id (owner_open_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_gift_study_record (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  family_id INT NOT NULL,
+  child_id INT NOT NULL,
+  child_name VARCHAR(64) NOT NULL,
+  grade VARCHAR(32) NOT NULL,
+  subject VARCHAR(64) NOT NULL,
+  item_id INT NOT NULL,
+  item_name VARCHAR(128) NOT NULL,
+  record_date DATETIME NOT NULL,
+  score_type VARCHAR(32) NOT NULL DEFAULT 'text',
+  score_value VARCHAR(128),
+  has_error TINYINT NOT NULL DEFAULT 0,
+  error_count INT NOT NULL DEFAULT 0,
+  corrected TINYINT NOT NULL DEFAULT 1,
+  correction_mark VARCHAR(8) NOT NULL DEFAULT '★',
+  note VARCHAR(1024),
+  attachment_file_id VARCHAR(512),
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  created_by_open_id VARCHAR(128) NOT NULL,
+  create_time DATETIME NOT NULL,
+  modify_time DATETIME NOT NULL,
+  INDEX idx_family_status_date (family_id, status, record_date),
+  INDEX idx_family_correction (family_id, correction_mark, status),
+  INDEX idx_child_subject_grade (child_id, subject, grade),
+  INDEX idx_item_id (item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -75,6 +75,12 @@ source sql/20260609_add_game_library.sql;
 source sql/20260609_add_restaurant_choice.sql;
 ```
 
+已有环境升级「我的学习」模块执行：
+
+```sql
+source sql/20260610_add_study_module.sql;
+```
+
 新增表：
 
 - `t_gift_game`
@@ -82,6 +88,8 @@ source sql/20260609_add_restaurant_choice.sql;
 - `t_gift_restaurant`
 - `t_gift_restaurant_visit`
 - `t_gift_restaurant_score`
+- `t_gift_study_item`
+- `t_gift_study_record`
 
 ## 配置
 
