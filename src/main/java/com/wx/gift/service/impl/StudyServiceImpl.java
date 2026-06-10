@@ -57,7 +57,6 @@ public class StudyServiceImpl implements StudyService {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
-        ensureDefaultItems(vo.getFamilyId(), vo.getOpenId());
         return studyItemMapper.selectList(new LambdaQueryWrapper<StudyItem>()
                         .eq(StudyItem::getFamilyId, vo.getFamilyId())
                         .ne(StudyItem::getStatus, "deleted")
