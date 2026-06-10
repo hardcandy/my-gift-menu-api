@@ -19,6 +19,7 @@ public class StudyItem {
     private String name;
     private String subjectScope;
     private String gradeScope;
+    private String scoreType;
     private String fieldConfig;
     private Integer correctionEnabled;
     private Integer sortOrder;

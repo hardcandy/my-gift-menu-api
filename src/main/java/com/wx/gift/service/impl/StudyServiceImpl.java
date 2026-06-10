@@ -81,11 +81,19 @@ public class StudyServiceImpl implements StudyService {
         Date now = new Date();
         StudySubject subject;
         if (vo.getSubjectId() == null) {
-            subject = new StudySubject();
-            subject.setFamilyId(vo.getFamilyId());
-            subject.setOwnerOpenId(vo.getOpenId());
-            subject.setStatus("active");
-            subject.setCreateTime(now);
+            subject = studySubjectMapper.selectOne(new LambdaQueryWrapper<StudySubject>()
+                    .eq(StudySubject::getFamilyId, vo.getFamilyId())
+                    .eq(StudySubject::getName, vo.getName())
+                    .eq(StudySubject::getGradeScope, StringUtils.defaultIfBlank(vo.getGradeScope(), "全部"))
+                    .ne(StudySubject::getStatus, "deleted")
+                    .last("limit 1"));
+            if (subject == null) {
+                subject = new StudySubject();
+                subject.setFamilyId(vo.getFamilyId());
+                subject.setOwnerOpenId(vo.getOpenId());
+                subject.setStatus("active");
+                subject.setCreateTime(now);
+            }
         } else {
             subject = studySubjectMapper.selectById(vo.getSubjectId());
             ValidatorUtil.checkArgument(subject != null && !"deleted".equals(subject.getStatus()), "学科不存在");
@@ -143,17 +151,27 @@ public class StudyServiceImpl implements StudyService {
         Date now = new Date();
         StudyItem item;
         if (vo.getItemId() == null) {
-            item = new StudyItem();
-            item.setFamilyId(vo.getFamilyId());
-            item.setOwnerOpenId(vo.getOpenId());
-            item.setStatus("active");
-            item.setCreateTime(now);
+            item = studyItemMapper.selectOne(new LambdaQueryWrapper<StudyItem>()
+                    .eq(StudyItem::getFamilyId, vo.getFamilyId())
+                    .eq(StudyItem::getName, vo.getName())
+                    .eq(StudyItem::getSubjectScope, StringUtils.defaultIfBlank(vo.getSubjectScope(), "全部"))
+                    .eq(StudyItem::getGradeScope, StringUtils.defaultIfBlank(vo.getGradeScope(), "全部"))
+                    .ne(StudyItem::getStatus, "deleted")
+                    .last("limit 1"));
+            if (item == null) {
+                item = new StudyItem();
+                item.setFamilyId(vo.getFamilyId());
+                item.setOwnerOpenId(vo.getOpenId());
+                item.setStatus("active");
+                item.setCreateTime(now);
+            }
         } else {
             item = requireItem(vo);
         }
         item.setName(vo.getName());
         item.setSubjectScope(StringUtils.defaultIfBlank(vo.getSubjectScope(), "全部"));
         item.setGradeScope(StringUtils.defaultIfBlank(vo.getGradeScope(), "全部"));
+        item.setScoreType(StringUtils.defaultIfBlank(vo.getScoreType(), "text"));
         item.setFieldConfig(StringUtils.defaultIfBlank(vo.getFieldConfig(), DEFAULT_FIELD_CONFIG));
         item.setCorrectionEnabled(vo.getCorrectionEnabled() == null ? 1 : vo.getCorrectionEnabled());
         item.setSortOrder(vo.getSortOrder() == null ? 100 : vo.getSortOrder());

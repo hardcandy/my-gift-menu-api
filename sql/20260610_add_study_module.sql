@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS t_gift_study_item (
   name VARCHAR(128) NOT NULL,
   subject_scope VARCHAR(128) NOT NULL DEFAULT '全部',
   grade_scope VARCHAR(128) NOT NULL DEFAULT '全部',
+  score_type VARCHAR(32) NOT NULL DEFAULT 'text',
   field_config TEXT,
   correction_enabled TINYINT NOT NULL DEFAULT 1,
   sort_order INT NOT NULL DEFAULT 100,
@@ -12,6 +13,7 @@ CREATE TABLE IF NOT EXISTS t_gift_study_item (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_family_status_sort (family_id, status, sort_order),
+  UNIQUE KEY uk_family_grade_subject_name (family_id, grade_scope, subject_scope, name, status),
   INDEX idx_owner_open_id (owner_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -54,5 +56,6 @@ CREATE TABLE IF NOT EXISTS t_gift_study_subject (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_family_status_sort (family_id, status, sort_order),
+  UNIQUE KEY uk_family_grade_name (family_id, grade_scope, name, status),
   INDEX idx_owner_open_id (owner_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
