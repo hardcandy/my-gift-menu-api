@@ -513,14 +513,68 @@ public class FamilyServiceImpl implements FamilyService {
     public List<Child> listChildren(String openId, Integer familyId) {
         ValidatorUtil.checkNotBlank(openId, "openId 不能为空");
         Integer targetFamilyId = familyId;
+        Family targetFamily;
         if (targetFamilyId == null) {
-            Family family = getFamilyByOpenId(openId);
-            if (family == null) {
+            targetFamily = getFamilyByOpenId(openId);
+            if (targetFamily == null) {
                 return java.util.Collections.emptyList();
             }
-            targetFamilyId = family.getId();
+            targetFamilyId = targetFamily.getId();
+        } else {
+            targetFamily = familyMapper.selectById(targetFamilyId);
         }
+        ValidatorUtil.checkArgument(isActiveFamily(targetFamily), "圈子不存在");
+        ensureChildrenFromChildMembers(targetFamily, openId);
         return childMapper.selectList(new LambdaQueryWrapper<Child>().eq(Child::getFamilyId, targetFamilyId).orderByDesc(Child::getId));
+    }
+
+    private void ensureChildrenFromChildMembers(Family family, String guardianOpenId) {
+        if (!"family".equals(family.getCircleType())) {
+            return;
+        }
+        java.util.Set<String> existingOpenIds = childMapper.selectList(new LambdaQueryWrapper<Child>()
+                        .eq(Child::getFamilyId, family.getId()))
+                .stream()
+                .map(Child::getChildOpenId)
+                .filter(StringUtils::isNotBlank)
+                .collect(java.util.stream.Collectors.toSet());
+        Date now = new Date();
+        if (isChildRole(ownerRole(family)) && !existingOpenIds.contains(family.getOwnerOpenId())) {
+            createChildFromMember(family.getId(), family.getOwnerOpenId(), guardianOpenId, now);
+            existingOpenIds.add(family.getOwnerOpenId());
+        }
+        List<FamilyMember> rows = familyMemberMapper.selectList(new LambdaQueryWrapper<FamilyMember>()
+                .eq(FamilyMember::getFamilyId, family.getId())
+                .orderByAsc(FamilyMember::getId));
+        for (FamilyMember row : rows) {
+            String memberOpenId = row.getMemberOpenId();
+            if (StringUtils.isBlank(memberOpenId) || existingOpenIds.contains(memberOpenId)) {
+                continue;
+            }
+            if (isChildRole(StringUtils.defaultIfBlank(row.getMemberRole(), "relative"))) {
+                createChildFromMember(family.getId(), memberOpenId, guardianOpenId, now);
+                existingOpenIds.add(memberOpenId);
+            }
+        }
+    }
+
+    private boolean isChildRole(String role) {
+        return "child".equals(role) || "boy".equals(role) || "girl".equals(role);
+    }
+
+    private void createChildFromMember(Integer familyId, String childOpenId, String guardianOpenId, Date now) {
+        BaseUser user = baseUserMapper.selectOne(new LambdaQueryWrapper<BaseUser>()
+                .eq(BaseUser::getOpenId, childOpenId)
+                .last("limit 1"));
+        Child child = new Child();
+        child.setFamilyId(familyId);
+        child.setChildOpenId(childOpenId);
+        child.setChildName(user == null ? "孩子" : StringUtils.defaultIfBlank(user.getNickName(), "孩子"));
+        child.setBirthday("");
+        child.setGuardianOpenId(guardianOpenId);
+        child.setCreateTime(now);
+        child.setModifyTime(now);
+        childMapper.insert(child);
     }
 
     private boolean isActiveFamily(Family family) {
