@@ -192,6 +192,8 @@ public class MiniGameServiceImpl implements MiniGameService {
         ValidatorUtil.checkNotBlank(vo.getName(), "词包名称不能为空");
         requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
         if (vo.getChildId() != null) requireChild(vo.getFamilyId(), vo.getChildId());
+        String packName = StringUtils.trim(vo.getName());
+        ensureUniqueWordPackName(vo.getFamilyId(), vo.getChildId(), packName, vo.getPackId());
         Date now = new Date();
         WordPack pack;
         if (vo.getPackId() == null) {
@@ -204,7 +206,7 @@ public class MiniGameServiceImpl implements MiniGameService {
             pack = requireWordPack(vo);
         }
         pack.setChildId(vo.getChildId());
-        pack.setName(vo.getName());
+        pack.setName(packName);
         pack.setGrade(StringUtils.defaultIfBlank(vo.getGrade(), "一年级"));
         pack.setSemester(StringUtils.defaultIfBlank(vo.getSemester(), "上学期"));
         pack.setSource(StringUtils.defaultIfBlank(vo.getSource(), "家长自定义"));
@@ -449,6 +451,17 @@ public class MiniGameServiceImpl implements MiniGameService {
         ValidatorUtil.checkArgument(item != null && !"deleted".equals(item.getStatus()), "字词不存在");
         if (vo.getFamilyId() != null) ValidatorUtil.checkArgument(Objects.equals(item.getFamilyId(), vo.getFamilyId()), "字词不在当前圈子");
         return item;
+    }
+
+    private void ensureUniqueWordPackName(Integer familyId, Integer childId, String name, Integer currentPackId) {
+        LambdaQueryWrapper<WordPack> wrapper = new LambdaQueryWrapper<WordPack>()
+                .eq(WordPack::getFamilyId, familyId)
+                .eq(WordPack::getName, name)
+                .ne(WordPack::getStatus, "deleted");
+        if (childId == null) wrapper.isNull(WordPack::getChildId);
+        else wrapper.eq(WordPack::getChildId, childId);
+        if (currentPackId != null) wrapper.ne(WordPack::getId, currentPackId);
+        ValidatorUtil.checkArgument(wordPackMapper.selectCount(wrapper) == 0, "词包名称已存在");
     }
 
     private Child requireChild(Integer familyId, Integer childId) {

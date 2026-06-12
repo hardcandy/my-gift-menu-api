@@ -407,6 +407,7 @@ CREATE TABLE IF NOT EXISTS t_gift_word_pack (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_family_child_status (family_id, child_id, status),
+  INDEX idx_family_child_name_status (family_id, child_id, name, status),
   INDEX idx_owner_open_id (owner_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
