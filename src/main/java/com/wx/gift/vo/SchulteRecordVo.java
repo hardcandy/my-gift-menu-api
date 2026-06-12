@@ -10,6 +10,9 @@ public class SchulteRecordVo {
     private Integer familyId;
     private Integer recordId;
     private Integer childId;
+    private String playerType;
+    private String playerOpenId;
+    private String playerName;
     private String difficulty;
     private Integer gridSize;
     private Integer totalNumbers;

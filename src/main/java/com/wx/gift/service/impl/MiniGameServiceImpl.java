@@ -85,22 +85,17 @@ public class MiniGameServiceImpl implements MiniGameService {
     public SchulteRecordDTO saveSchulteRecord(SchulteRecordVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
-        ValidatorUtil.checkNotNull(vo.getChildId(), "请选择孩子");
         ValidatorUtil.checkNotBlank(vo.getDifficulty(), "请选择难度");
         ValidatorUtil.checkArgument(vo.getGridSize() != null && vo.getGridSize() >= 2 && vo.getGridSize() <= 6, "难度暂不支持");
         ValidatorUtil.checkArgument(vo.getTotalNumbers() != null && vo.getTotalNumbers().equals(vo.getGridSize() * vo.getGridSize()), "数字总数不正确");
         ValidatorUtil.checkArgument(vo.getCompleted() == null || vo.getCompleted() == 1, "未完成记录暂不保存");
         ValidatorUtil.checkArgument(vo.getDurationMs() != null && vo.getDurationMs() > 0, "完成用时不正确");
         requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
-        Child child = childMapper.selectById(vo.getChildId());
-        ValidatorUtil.checkArgument(child != null && Objects.equals(child.getFamilyId(), vo.getFamilyId()), "孩子不在当前圈子");
 
         Date now = new Date();
         SchulteRecord record = new SchulteRecord();
         record.setFamilyId(vo.getFamilyId());
-        record.setChildId(child.getId());
-        record.setChildName(child.getChildName());
-        record.setChildOpenId(StringUtils.defaultString(child.getChildOpenId()));
+        fillSchultePlayer(record, vo);
         record.setOperatorOpenId(vo.getOpenId());
         record.setGameName("舒尔特方格");
         record.setGameMode("数字顺序");
@@ -671,6 +666,12 @@ public class MiniGameServiceImpl implements MiniGameService {
                 .eq(SchulteRecord::getFamilyId, vo.getFamilyId())
                 .ne(SchulteRecord::getStatus, "deleted");
         if (vo.getChildId() != null) wrapper.eq(SchulteRecord::getChildId, vo.getChildId());
+        if (vo.getChildId() == null && StringUtils.isNotBlank(vo.getPlayerType())) {
+            wrapper.eq(SchulteRecord::getPlayerType, vo.getPlayerType());
+        }
+        if (vo.getChildId() == null && StringUtils.isNotBlank(vo.getPlayerOpenId())) {
+            wrapper.eq(SchulteRecord::getPlayerOpenId, vo.getPlayerOpenId());
+        }
         if (StringUtils.isNotBlank(vo.getDifficulty()) && !"全部".equals(vo.getDifficulty())) {
             wrapper.eq(SchulteRecord::getDifficulty, vo.getDifficulty());
         }
@@ -689,6 +690,32 @@ public class MiniGameServiceImpl implements MiniGameService {
                 .eq(FamilyMember::getMemberOpenId, openId)
                 .last("limit 1"));
         ValidatorUtil.checkNotNull(member, "只有圈内成员可以操作小游戏记录");
+    }
+
+    private void fillSchultePlayer(SchulteRecord record, SchulteRecordVo vo) {
+        if (vo.getChildId() != null || StringUtils.isBlank(vo.getPlayerType()) || "child".equals(vo.getPlayerType())) {
+            ValidatorUtil.checkNotNull(vo.getChildId(), "请选择记录对象");
+            Child child = childMapper.selectById(vo.getChildId());
+            ValidatorUtil.checkArgument(child != null && Objects.equals(child.getFamilyId(), vo.getFamilyId()), "孩子不在当前圈子");
+            record.setChildId(child.getId());
+            record.setChildName(child.getChildName());
+            record.setChildOpenId(StringUtils.defaultString(child.getChildOpenId()));
+            record.setPlayerType("child");
+            record.setPlayerOpenId(StringUtils.defaultString(child.getChildOpenId()));
+            record.setPlayerName(child.getChildName());
+            return;
+        }
+
+        ValidatorUtil.checkArgument("adult".equals(vo.getPlayerType()), "记录对象类型不正确");
+        ValidatorUtil.checkNotBlank(vo.getPlayerOpenId(), "请选择记录对象");
+        requireFamilyMember(vo.getFamilyId(), vo.getPlayerOpenId());
+        String playerName = StringUtils.defaultIfBlank(vo.getPlayerName(), "圈友");
+        record.setChildId(null);
+        record.setChildName(playerName);
+        record.setChildOpenId(vo.getPlayerOpenId());
+        record.setPlayerType("adult");
+        record.setPlayerOpenId(vo.getPlayerOpenId());
+        record.setPlayerName(playerName);
     }
 
     private boolean isFamilyOwner(Integer familyId, String openId) {

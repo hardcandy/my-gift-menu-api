@@ -366,9 +366,12 @@ CREATE TABLE IF NOT EXISTS t_gift_study_record (
 CREATE TABLE IF NOT EXISTS t_gift_schulte_record (
   id INT PRIMARY KEY AUTO_INCREMENT,
   family_id INT NOT NULL,
-  child_id INT NOT NULL,
+  child_id INT,
   child_name VARCHAR(128) NOT NULL,
   child_open_id VARCHAR(128),
+  player_type VARCHAR(32) NOT NULL DEFAULT 'child',
+  player_open_id VARCHAR(128),
+  player_name VARCHAR(128),
   operator_open_id VARCHAR(128) NOT NULL,
   game_name VARCHAR(64) NOT NULL DEFAULT '舒尔特方格',
   game_mode VARCHAR(64) NOT NULL DEFAULT '数字顺序',
@@ -389,6 +392,7 @@ CREATE TABLE IF NOT EXISTS t_gift_schulte_record (
   create_time DATETIME NOT NULL,
   modify_time DATETIME NOT NULL,
   INDEX idx_family_child_time (family_id, child_id, start_time),
+  INDEX idx_family_player_time (family_id, player_type, player_open_id, start_time),
   INDEX idx_family_difficulty_time (family_id, difficulty, start_time),
   INDEX idx_operator_open_id (operator_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

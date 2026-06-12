@@ -13,6 +13,9 @@ public class SchulteRecordDTO {
     private Integer childId;
     private String childName;
     private String childOpenId;
+    private String playerType;
+    private String playerOpenId;
+    private String playerName;
     private String operatorOpenId;
     private String gameName;
     private String gameMode;
