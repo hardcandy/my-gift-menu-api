@@ -135,9 +135,11 @@ public class MiniGameServiceImpl implements MiniGameService {
         List<SchulteRecord> records = queryRecords(vo).stream()
                 .sorted(Comparator.comparing(SchulteRecord::getStartTime, Comparator.nullsLast(Date::compareTo)))
                 .collect(Collectors.toList());
+        Integer resolvedLimit = resolveLimit(vo.getLimit());
+        int latestLimit = resolvedLimit == null ? 20 : resolvedLimit;
         List<SchulteRecord> latest = records.stream()
                 .sorted(Comparator.comparing(SchulteRecord::getStartTime, Comparator.nullsLast(Date::compareTo)).reversed())
-                .limit(resolveLimit(vo.getLimit()))
+                .limit(latestLimit)
                 .collect(Collectors.toList());
 
         Map<String, Object> result = new HashMap<>();
