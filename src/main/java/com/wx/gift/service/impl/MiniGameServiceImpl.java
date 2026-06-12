@@ -280,6 +280,27 @@ public class MiniGameServiceImpl implements MiniGameService {
         GomokuGame game = requireGomokuGame(vo);
         requireFamilyMember(game.getFamilyId(), vo.getOpenId());
         ValidatorUtil.checkArgument(StringUtils.isNotBlank(playerColor(game, vo.getOpenId())), "你不是这局的玩家");
+        if (isGomokuFinished(game.getStatus())) {
+            Date now = new Date();
+            GomokuGame next = new GomokuGame();
+            next.setFamilyId(game.getFamilyId());
+            next.setRoomCode(game.getRoomCode());
+            next.setBlackOpenId(game.getBlackOpenId());
+            next.setBlackName(game.getBlackName());
+            next.setWhiteOpenId(game.getWhiteOpenId());
+            next.setWhiteName(game.getWhiteName());
+            next.setCurrentTurn("black");
+            next.setBoardText(emptyGomokuBoard());
+            next.setMoveCount(0);
+            next.setLastMoveIndex(null);
+            next.setWinnerOpenId("");
+            next.setWinnerName("");
+            next.setStatus(StringUtils.isNotBlank(game.getWhiteOpenId()) ? "playing" : "waiting");
+            next.setCreateTime(now);
+            next.setModifyTime(now);
+            gomokuGameMapper.insert(next);
+            return gomokuDto(next, vo.getOpenId());
+        }
         game.setBoardText(emptyGomokuBoard());
         game.setMoveCount(0);
         game.setLastMoveIndex(null);
@@ -847,6 +868,10 @@ public class MiniGameServiceImpl implements MiniGameService {
         if (openId != null && openId.equals(game.getBlackOpenId())) return "black";
         if (openId != null && openId.equals(game.getWhiteOpenId())) return "white";
         return "";
+    }
+
+    private boolean isGomokuFinished(String status) {
+        return "black_win".equals(status) || "white_win".equals(status) || "draw".equals(status);
     }
 
     private String userName(String openId) {
