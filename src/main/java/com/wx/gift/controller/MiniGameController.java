@@ -3,6 +3,7 @@ package com.wx.gift.controller;
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.service.MiniGameService;
 import com.wx.gift.vo.GomokuGameVo;
+import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -117,5 +118,20 @@ public class MiniGameController {
     @RequestMapping("/gomoku/restart")
     public Map<String, Object> restartGomokuGame(@RequestBody GomokuGameVo vo) {
         return miniGameService.restartGomokuGame(vo);
+    }
+
+    @RequestMapping("/gomoku/leaderboard")
+    public List<Map<String, Object>> gomokuLeaderboard(@RequestBody GomokuGameVo vo) {
+        return miniGameService.gomokuLeaderboard(vo);
+    }
+
+    @RequestMapping("/river/saveRecord")
+    public Map<String, Object> saveRiverCrossingRecord(@RequestBody RiverCrossingVo vo) {
+        return miniGameService.saveRiverCrossingRecord(vo);
+    }
+
+    @RequestMapping("/river/leaderboard")
+    public List<Map<String, Object>> riverCrossingLeaderboard(@RequestBody RiverCrossingVo vo) {
+        return miniGameService.riverCrossingLeaderboard(vo);
     }
 }

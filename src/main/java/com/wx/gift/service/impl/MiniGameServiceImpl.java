@@ -7,6 +7,7 @@ import com.wx.gift.mapper.ChildMapper;
 import com.wx.gift.mapper.FamilyMapper;
 import com.wx.gift.mapper.FamilyMemberMapper;
 import com.wx.gift.mapper.GomokuGameMapper;
+import com.wx.gift.mapper.RiverCrossingRecordMapper;
 import com.wx.gift.mapper.SchulteRecordMapper;
 import com.wx.gift.mapper.WordItemMapper;
 import com.wx.gift.mapper.WordPackMapper;
@@ -17,6 +18,7 @@ import com.wx.gift.model.Child;
 import com.wx.gift.model.Family;
 import com.wx.gift.model.FamilyMember;
 import com.wx.gift.model.GomokuGame;
+import com.wx.gift.model.RiverCrossingRecord;
 import com.wx.gift.model.SchulteRecord;
 import com.wx.gift.model.WordItem;
 import com.wx.gift.model.WordPack;
@@ -26,6 +28,7 @@ import com.wx.gift.service.MiniGameService;
 import com.wx.gift.util.GsonUtil;
 import com.wx.gift.util.ValidatorUtil;
 import com.wx.gift.vo.GomokuGameVo;
+import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
 import org.apache.commons.lang3.StringUtils;
@@ -61,6 +64,8 @@ public class MiniGameServiceImpl implements MiniGameService {
     private ChildMapper childMapper;
     @Autowired
     private GomokuGameMapper gomokuGameMapper;
+    @Autowired
+    private RiverCrossingRecordMapper riverCrossingRecordMapper;
     @Autowired
     private WordPackMapper wordPackMapper;
     @Autowired
@@ -311,6 +316,83 @@ public class MiniGameServiceImpl implements MiniGameService {
         game.setModifyTime(new Date());
         gomokuGameMapper.updateById(game);
         return gomokuDto(game, vo.getOpenId());
+    }
+
+    @Override
+    public List<Map<String, Object>> gomokuLeaderboard(GomokuGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        List<GomokuGame> games = gomokuGameMapper.selectList(new LambdaQueryWrapper<GomokuGame>()
+                .eq(GomokuGame::getFamilyId, vo.getFamilyId())
+                .in(GomokuGame::getStatus, "black_win", "white_win", "draw")
+                .orderByDesc(GomokuGame::getModifyTime));
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        for (GomokuGame game : games) {
+            addGomokuPlayer(rows, game.getBlackOpenId(), game.getBlackName());
+            addGomokuPlayer(rows, game.getWhiteOpenId(), game.getWhiteName());
+            if ("black_win".equals(game.getStatus())) addInt(rows.get(game.getBlackOpenId()), "winCount", 1);
+            else if ("white_win".equals(game.getStatus())) addInt(rows.get(game.getWhiteOpenId()), "winCount", 1);
+            else {
+                addInt(rows.get(game.getBlackOpenId()), "drawCount", 1);
+                addInt(rows.get(game.getWhiteOpenId()), "drawCount", 1);
+            }
+            addInt(rows.get(game.getBlackOpenId()), "playCount", 1);
+            addInt(rows.get(game.getWhiteOpenId()), "playCount", 1);
+        }
+        return rows.values().stream()
+                .filter(row -> StringUtils.isNotBlank((String) row.get("openId")))
+                .sorted((a, b) -> {
+                    int win = ((Integer) b.get("winCount")).compareTo((Integer) a.get("winCount"));
+                    if (win != 0) return win;
+                    int play = ((Integer) a.get("playCount")).compareTo((Integer) b.get("playCount"));
+                    if (play != 0) return play;
+                    return ((String) a.get("name")).compareTo((String) b.get("name"));
+                })
+                .limit(resolveLimit(vo.getLimit()) == null ? 20 : resolveLimit(vo.getLimit()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> saveRiverCrossingRecord(RiverCrossingVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        ValidatorUtil.checkArgument(vo.getStepCount() != null && vo.getStepCount() > 0, "通关步数不正确");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        RiverCrossingRecord record = new RiverCrossingRecord();
+        record.setFamilyId(vo.getFamilyId());
+        record.setPlayerOpenId(vo.getOpenId());
+        record.setPlayerName(userName(vo.getOpenId()));
+        record.setStepCount(vo.getStepCount());
+        record.setFailCount(Math.max(0, vo.getFailCount() == null ? 0 : vo.getFailCount()));
+        record.setHintCount(Math.max(0, vo.getHintCount() == null ? 0 : vo.getHintCount()));
+        record.setDurationMs(Math.max(0, vo.getDurationMs() == null ? 0 : vo.getDurationMs()));
+        record.setStarCount(Math.max(1, Math.min(3, vo.getStarCount() == null ? 1 : vo.getStarCount())));
+        record.setStatus("active");
+        record.setCreateTime(now);
+        record.setModifyTime(now);
+        riverCrossingRecordMapper.insert(record);
+        return riverRecordDto(record);
+    }
+
+    @Override
+    public List<Map<String, Object>> riverCrossingLeaderboard(RiverCrossingVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Integer limit = resolveLimit(vo.getLimit());
+        LambdaQueryWrapper<RiverCrossingRecord> wrapper = new LambdaQueryWrapper<RiverCrossingRecord>()
+                .eq(RiverCrossingRecord::getFamilyId, vo.getFamilyId())
+                .eq(RiverCrossingRecord::getStatus, "active")
+                .orderByDesc(RiverCrossingRecord::getStarCount)
+                .orderByAsc(RiverCrossingRecord::getStepCount)
+                .orderByAsc(RiverCrossingRecord::getDurationMs)
+                .orderByAsc(RiverCrossingRecord::getHintCount)
+                .orderByAsc(RiverCrossingRecord::getFailCount);
+        if (limit != null) wrapper.last("limit " + limit);
+        return riverCrossingRecordMapper.selectList(wrapper).stream().map(this::riverRecordDto).collect(Collectors.toList());
     }
 
     @Override
@@ -870,6 +952,24 @@ public class MiniGameServiceImpl implements MiniGameService {
         return "";
     }
 
+    private void addGomokuPlayer(Map<String, Map<String, Object>> rows, String openId, String name) {
+        if (StringUtils.isBlank(openId)) return;
+        rows.computeIfAbsent(openId, key -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("openId", key);
+            row.put("name", StringUtils.defaultIfBlank(name, "棋手"));
+            row.put("playCount", 0);
+            row.put("winCount", 0);
+            row.put("drawCount", 0);
+            return row;
+        });
+    }
+
+    private void addInt(Map<String, Object> row, String key, int value) {
+        if (row == null) return;
+        row.put(key, ((Integer) row.get(key)) + value);
+    }
+
     private boolean isGomokuFinished(String status) {
         return "black_win".equals(status) || "white_win".equals(status) || "draw".equals(status);
     }
@@ -902,6 +1002,21 @@ public class MiniGameServiceImpl implements MiniGameService {
         map.put("myTurn", "playing".equals(game.getStatus()) && StringUtils.isNotBlank(myColor) && myColor.equals(game.getCurrentTurn()));
         map.put("createTime", game.getCreateTime());
         map.put("modifyTime", game.getModifyTime());
+        return map;
+    }
+
+    private Map<String, Object> riverRecordDto(RiverCrossingRecord record) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", record.getId());
+        map.put("familyId", record.getFamilyId());
+        map.put("playerOpenId", record.getPlayerOpenId());
+        map.put("playerName", record.getPlayerName());
+        map.put("stepCount", record.getStepCount());
+        map.put("failCount", record.getFailCount());
+        map.put("hintCount", record.getHintCount());
+        map.put("durationMs", record.getDurationMs());
+        map.put("starCount", record.getStarCount());
+        map.put("createTime", record.getCreateTime());
         return map;
     }
 
