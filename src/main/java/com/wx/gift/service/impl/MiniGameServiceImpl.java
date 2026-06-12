@@ -7,6 +7,7 @@ import com.wx.gift.mapper.ChildMapper;
 import com.wx.gift.mapper.FamilyMapper;
 import com.wx.gift.mapper.FamilyMemberMapper;
 import com.wx.gift.mapper.GomokuGameMapper;
+import com.wx.gift.mapper.NimGameMapper;
 import com.wx.gift.mapper.RiverCrossingRecordMapper;
 import com.wx.gift.mapper.SchulteRecordMapper;
 import com.wx.gift.mapper.WordItemMapper;
@@ -18,6 +19,7 @@ import com.wx.gift.model.Child;
 import com.wx.gift.model.Family;
 import com.wx.gift.model.FamilyMember;
 import com.wx.gift.model.GomokuGame;
+import com.wx.gift.model.NimGame;
 import com.wx.gift.model.RiverCrossingRecord;
 import com.wx.gift.model.SchulteRecord;
 import com.wx.gift.model.WordItem;
@@ -28,6 +30,7 @@ import com.wx.gift.service.MiniGameService;
 import com.wx.gift.util.GsonUtil;
 import com.wx.gift.util.ValidatorUtil;
 import com.wx.gift.vo.GomokuGameVo;
+import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
@@ -65,6 +68,8 @@ public class MiniGameServiceImpl implements MiniGameService {
     @Autowired
     private GomokuGameMapper gomokuGameMapper;
     @Autowired
+    private NimGameMapper nimGameMapper;
+    @Autowired
     private RiverCrossingRecordMapper riverCrossingRecordMapper;
     @Autowired
     private WordPackMapper wordPackMapper;
@@ -92,6 +97,13 @@ public class MiniGameServiceImpl implements MiniGameService {
         gomoku.put("recommendedAge", "6岁+");
         gomoku.put("difficulties", "黑白轮流落子，先连五子获胜");
         list.add(gomoku);
+        Map<String, Object> nim = new LinkedHashMap<>();
+        nim.put("key", "nim");
+        nim.put("name", "取石子大作战");
+        nim.put("summary", "联网双人对战 / 随机匹配 / 1-3颗策略博弈");
+        nim.put("recommendedAge", "6岁+");
+        nim.put("difficulties", "21颗石子，拿最后一颗获胜");
+        list.add(nim);
         Map<String, Object> word = new LinkedHashMap<>();
         word.put("key", "wordDetective");
         word.put("name", "字词小侦探");
@@ -393,6 +405,172 @@ public class MiniGameServiceImpl implements MiniGameService {
                 .orderByAsc(RiverCrossingRecord::getFailCount);
         if (limit != null) wrapper.last("limit " + limit);
         return riverCrossingRecordMapper.selectList(wrapper).stream().map(this::riverRecordDto).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> createNimGame(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        NimGame game = newNimGame(vo.getFamilyId(), vo.getOpenId(), "ROOM", "WAITING");
+        nimGameMapper.insert(game);
+        return nimDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> joinNimGame(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getRoomCode(), "请输入房间号");
+        NimGame game = requireNimGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(!"PLAYING".equals(game.getStatus()), "游戏已开始，无法加入");
+        ValidatorUtil.checkArgument(!"FINISHED".equals(game.getStatus()) && !"CLOSED".equals(game.getStatus()), "房间已结束");
+        if (vo.getOpenId().equals(game.getHostOpenId()) || vo.getOpenId().equals(game.getGuestOpenId())) {
+            return nimDto(game, vo.getOpenId());
+        }
+        ValidatorUtil.checkArgument(StringUtils.isBlank(game.getGuestOpenId()), "房间已满");
+        game.setGuestOpenId(vo.getOpenId());
+        game.setGuestName(userName(vo.getOpenId()));
+        game.setStatus("READY");
+        game.setModifyTime(new Date());
+        nimGameMapper.updateById(game);
+        return nimDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> randomNimGame(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        closeMyMatchingNim(vo.getFamilyId(), vo.getOpenId());
+        NimGame waiting = nimGameMapper.selectOne(new LambdaQueryWrapper<NimGame>()
+                .eq(NimGame::getFamilyId, vo.getFamilyId())
+                .eq(NimGame::getRoomType, "RANDOM")
+                .eq(NimGame::getStatus, "MATCHING")
+                .ne(NimGame::getHostOpenId, vo.getOpenId())
+                .orderByAsc(NimGame::getCreateTime)
+                .last("limit 1"));
+        if (waiting == null) {
+            NimGame game = newNimGame(vo.getFamilyId(), vo.getOpenId(), "RANDOM", "MATCHING");
+            nimGameMapper.insert(game);
+            return nimDto(game, vo.getOpenId());
+        }
+        waiting.setGuestOpenId(vo.getOpenId());
+        waiting.setGuestName(userName(vo.getOpenId()));
+        startNim(waiting, ThreadLocalRandom.current().nextBoolean() ? waiting.getHostOpenId() : waiting.getGuestOpenId());
+        nimGameMapper.updateById(waiting);
+        return nimDto(waiting, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean cancelNimMatch(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        if (vo.getFamilyId() == null) return true;
+        closeMyMatchingNim(vo.getFamilyId(), vo.getOpenId());
+        return true;
+    }
+
+    @Override
+    public Map<String, Object> nimGameDetail(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        NimGame game = requireNimGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        return nimDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> startNimGame(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        NimGame game = requireNimGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以开始");
+        ValidatorUtil.checkArgument(StringUtils.isNotBlank(game.getGuestOpenId()), "需要两位玩家才能开始");
+        ValidatorUtil.checkArgument("READY".equals(game.getStatus()) || "WAITING".equals(game.getStatus()), "当前房间不能开始");
+        startNim(game, game.getHostOpenId());
+        nimGameMapper.updateById(game);
+        return nimDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> nimTake(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getTakeCount(), "请选择取几颗");
+        NimGame game = requireNimGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument("PLAYING".equals(game.getStatus()), "游戏未开始");
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()) || vo.getOpenId().equals(game.getGuestOpenId()), "你不是这局玩家");
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getCurrentTurnOpenId()), "还没轮到你");
+        int take = vo.getTakeCount();
+        ValidatorUtil.checkArgument(take >= game.getMinTake() && take <= game.getMaxTake(), "每次只能取 1～3 颗");
+        ValidatorUtil.checkArgument(take <= game.getRemainingStones(), "剩余石子不足");
+        int remaining = game.getRemainingStones() - take;
+        int round = (game.getTotalRounds() == null ? 0 : game.getTotalRounds()) + 1;
+        game.setRemainingStones(remaining);
+        game.setTotalRounds(round);
+        game.setMoveHistory(appendNimMove(game.getMoveHistory(), round, vo.getOpenId(), nimPlayerName(game, vo.getOpenId()), take, remaining));
+        if (remaining <= 0) {
+            game.setStatus("FINISHED");
+            game.setWinnerOpenId(vo.getOpenId());
+            game.setWinnerName(nimPlayerName(game, vo.getOpenId()));
+            game.setFinishedAt(new Date());
+        } else {
+            game.setCurrentTurnOpenId(vo.getOpenId().equals(game.getHostOpenId()) ? game.getGuestOpenId() : game.getHostOpenId());
+        }
+        game.setModifyTime(new Date());
+        nimGameMapper.updateById(game);
+        return nimDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> restartNimGame(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        NimGame old = requireNimGame(vo);
+        requireFamilyMember(old.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(old.getHostOpenId()) || vo.getOpenId().equals(old.getGuestOpenId()), "你不是这局玩家");
+        NimGame game = newNimGame(old.getFamilyId(), old.getHostOpenId(), old.getRoomType(), StringUtils.isNotBlank(old.getGuestOpenId()) ? "PLAYING" : "WAITING");
+        game.setRoomCode(old.getRoomCode());
+        game.setGuestOpenId(old.getGuestOpenId());
+        game.setGuestName(old.getGuestName());
+        if ("PLAYING".equals(game.getStatus())) {
+            startNim(game, old.getGuestOpenId());
+        }
+        nimGameMapper.insert(game);
+        return nimDto(game, vo.getOpenId());
+    }
+
+    @Override
+    public List<Map<String, Object>> nimLeaderboard(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        List<NimGame> games = nimGameMapper.selectList(new LambdaQueryWrapper<NimGame>()
+                .eq(NimGame::getFamilyId, vo.getFamilyId())
+                .eq(NimGame::getStatus, "FINISHED")
+                .orderByDesc(NimGame::getFinishedAt));
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        for (NimGame game : games) {
+            addNimPlayer(rows, game.getHostOpenId(), game.getHostName());
+            addNimPlayer(rows, game.getGuestOpenId(), game.getGuestName());
+            addInt(rows.get(game.getHostOpenId()), "playCount", 1);
+            addInt(rows.get(game.getGuestOpenId()), "playCount", 1);
+            addInt(rows.get(game.getWinnerOpenId()), "winCount", 1);
+        }
+        return rows.values().stream()
+                .filter(row -> StringUtils.isNotBlank((String) row.get("openId")))
+                .sorted((a, b) -> {
+                    int win = ((Integer) b.get("winCount")).compareTo((Integer) a.get("winCount"));
+                    if (win != 0) return win;
+                    return ((Integer) a.get("playCount")).compareTo((Integer) b.get("playCount"));
+                })
+                .limit(resolveLimit(vo.getLimit()) == null ? 20 : resolveLimit(vo.getLimit()))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -920,6 +1098,158 @@ public class MiniGameServiceImpl implements MiniGameService {
             if (count == null || count == 0) return code;
         }
         return String.valueOf(System.currentTimeMillis()).substring(7, 13);
+    }
+
+    private NimGame newNimGame(Integer familyId, String hostOpenId, String roomType, String status) {
+        Date now = new Date();
+        NimGame game = new NimGame();
+        game.setFamilyId(familyId);
+        game.setRoomCode(generateNimRoomCode());
+        game.setRoomType(roomType);
+        game.setHostOpenId(hostOpenId);
+        game.setHostName(userName(hostOpenId));
+        game.setInitialStones(21);
+        game.setMinTake(1);
+        game.setMaxTake(3);
+        game.setRemainingStones(21);
+        game.setTotalRounds(0);
+        game.setMoveHistory("[]");
+        game.setStatus(status);
+        game.setCreateTime(now);
+        game.setModifyTime(now);
+        return game;
+    }
+
+    private String generateNimRoomCode() {
+        for (int i = 0; i < 20; i++) {
+            String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
+            Long count = nimGameMapper.selectCount(new LambdaQueryWrapper<NimGame>()
+                    .eq(NimGame::getRoomCode, code)
+                    .in(NimGame::getStatus, "WAITING", "MATCHING", "READY", "PLAYING")
+                    .last("limit 1"));
+            if (count == null || count == 0) return code;
+        }
+        return String.valueOf(System.currentTimeMillis()).substring(7, 13);
+    }
+
+    private void closeMyMatchingNim(Integer familyId, String openId) {
+        nimGameMapper.selectList(new LambdaQueryWrapper<NimGame>()
+                .eq(NimGame::getFamilyId, familyId)
+                .eq(NimGame::getRoomType, "RANDOM")
+                .eq(NimGame::getStatus, "MATCHING")
+                .eq(NimGame::getHostOpenId, openId))
+                .forEach(game -> {
+                    game.setStatus("CLOSED");
+                    game.setModifyTime(new Date());
+                    nimGameMapper.updateById(game);
+                });
+    }
+
+    private NimGame requireNimGame(NimGameVo vo) {
+        NimGame game = null;
+        if (vo.getGameId() != null) {
+            game = nimGameMapper.selectById(vo.getGameId());
+        } else if (StringUtils.isNotBlank(vo.getRoomCode())) {
+            game = nimGameMapper.selectOne(new LambdaQueryWrapper<NimGame>()
+                    .eq(NimGame::getRoomCode, StringUtils.trim(vo.getRoomCode()))
+                    .ne(NimGame::getStatus, "CLOSED")
+                    .orderByDesc(NimGame::getId)
+                    .last("limit 1"));
+        }
+        ValidatorUtil.checkNotNull(game, "房间不存在");
+        if (vo.getFamilyId() != null) ValidatorUtil.checkArgument(Objects.equals(game.getFamilyId(), vo.getFamilyId()), "房间不在当前圈子");
+        return game;
+    }
+
+    private void startNim(NimGame game, String firstOpenId) {
+        Date now = new Date();
+        game.setStatus("PLAYING");
+        game.setRemainingStones(game.getInitialStones());
+        game.setTotalRounds(0);
+        game.setMoveHistory("[]");
+        game.setCurrentTurnOpenId(firstOpenId);
+        game.setWinnerOpenId("");
+        game.setWinnerName("");
+        game.setStartedAt(now);
+        game.setFinishedAt(null);
+        game.setModifyTime(now);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String appendNimMove(String historyText, int round, String openId, String name, int take, int remaining) {
+        List<Map<String, Object>> moves;
+        try {
+            moves = GsonUtil.fromJson(StringUtils.defaultIfBlank(historyText, "[]"), List.class);
+        } catch (Exception e) {
+            moves = new ArrayList<>();
+        }
+        Map<String, Object> move = new LinkedHashMap<>();
+        move.put("round", round);
+        move.put("openId", openId);
+        move.put("name", name);
+        move.put("takeCount", take);
+        move.put("remainingStones", remaining);
+        move.put("createdAt", System.currentTimeMillis());
+        moves.add(move);
+        return GsonUtil.toJson(moves);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> nimMoves(String historyText) {
+        try {
+            return GsonUtil.fromJson(StringUtils.defaultIfBlank(historyText, "[]"), List.class);
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private String nimPlayerName(NimGame game, String openId) {
+        if (openId != null && openId.equals(game.getHostOpenId())) return game.getHostName();
+        if (openId != null && openId.equals(game.getGuestOpenId())) return game.getGuestName();
+        return "玩家";
+    }
+
+    private Map<String, Object> nimDto(NimGame game, String openId) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", game.getId());
+        map.put("familyId", game.getFamilyId());
+        map.put("roomCode", game.getRoomCode());
+        map.put("roomType", game.getRoomType());
+        map.put("hostOpenId", game.getHostOpenId());
+        map.put("hostName", game.getHostName());
+        map.put("guestOpenId", StringUtils.defaultString(game.getGuestOpenId()));
+        map.put("guestName", StringUtils.defaultString(game.getGuestName()));
+        map.put("currentTurnOpenId", StringUtils.defaultString(game.getCurrentTurnOpenId()));
+        map.put("winnerOpenId", StringUtils.defaultString(game.getWinnerOpenId()));
+        map.put("winnerName", StringUtils.defaultString(game.getWinnerName()));
+        map.put("initialStones", game.getInitialStones());
+        map.put("minTake", game.getMinTake());
+        map.put("maxTake", game.getMaxTake());
+        map.put("remainingStones", game.getRemainingStones());
+        map.put("totalRounds", game.getTotalRounds());
+        map.put("moveHistory", nimMoves(game.getMoveHistory()));
+        map.put("status", game.getStatus());
+        map.put("isHost", openId != null && openId.equals(game.getHostOpenId()));
+        map.put("isPlayer", openId != null && (openId.equals(game.getHostOpenId()) || openId.equals(game.getGuestOpenId())));
+        map.put("myTurn", "PLAYING".equals(game.getStatus()) && openId != null && openId.equals(game.getCurrentTurnOpenId()));
+        map.put("matched", "PLAYING".equals(game.getStatus()) || "READY".equals(game.getStatus()));
+        map.put("createTime", game.getCreateTime());
+        map.put("modifyTime", game.getModifyTime());
+        map.put("startedAt", game.getStartedAt());
+        map.put("finishedAt", game.getFinishedAt());
+        return map;
+    }
+
+    private void addNimPlayer(Map<String, Map<String, Object>> rows, String openId, String name) {
+        if (StringUtils.isBlank(openId)) return;
+        rows.computeIfAbsent(openId, key -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("openId", key);
+            row.put("name", StringUtils.defaultIfBlank(name, "玩家"));
+            row.put("playCount", 0);
+            row.put("winCount", 0);
+            return row;
+        });
     }
 
     private GomokuGame requireGomokuGame(GomokuGameVo vo) {

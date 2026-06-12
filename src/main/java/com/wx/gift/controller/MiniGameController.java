@@ -3,6 +3,7 @@ package com.wx.gift.controller;
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.service.MiniGameService;
 import com.wx.gift.vo.GomokuGameVo;
+import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
@@ -133,5 +134,50 @@ public class MiniGameController {
     @RequestMapping("/river/leaderboard")
     public List<Map<String, Object>> riverCrossingLeaderboard(@RequestBody RiverCrossingVo vo) {
         return miniGameService.riverCrossingLeaderboard(vo);
+    }
+
+    @RequestMapping("/nim/create")
+    public Map<String, Object> createNimGame(@RequestBody NimGameVo vo) {
+        return miniGameService.createNimGame(vo);
+    }
+
+    @RequestMapping("/nim/join")
+    public Map<String, Object> joinNimGame(@RequestBody NimGameVo vo) {
+        return miniGameService.joinNimGame(vo);
+    }
+
+    @RequestMapping("/nim/random")
+    public Map<String, Object> randomNimGame(@RequestBody NimGameVo vo) {
+        return miniGameService.randomNimGame(vo);
+    }
+
+    @RequestMapping("/nim/cancelMatch")
+    public Boolean cancelNimMatch(@RequestBody NimGameVo vo) {
+        return miniGameService.cancelNimMatch(vo);
+    }
+
+    @RequestMapping("/nim/detail")
+    public Map<String, Object> nimGameDetail(@RequestBody NimGameVo vo) {
+        return miniGameService.nimGameDetail(vo);
+    }
+
+    @RequestMapping("/nim/start")
+    public Map<String, Object> startNimGame(@RequestBody NimGameVo vo) {
+        return miniGameService.startNimGame(vo);
+    }
+
+    @RequestMapping("/nim/take")
+    public Map<String, Object> nimTake(@RequestBody NimGameVo vo) {
+        return miniGameService.nimTake(vo);
+    }
+
+    @RequestMapping("/nim/restart")
+    public Map<String, Object> restartNimGame(@RequestBody NimGameVo vo) {
+        return miniGameService.restartNimGame(vo);
+    }
+
+    @RequestMapping("/nim/leaderboard")
+    public List<Map<String, Object>> nimLeaderboard(@RequestBody NimGameVo vo) {
+        return miniGameService.nimLeaderboard(vo);
     }
 }

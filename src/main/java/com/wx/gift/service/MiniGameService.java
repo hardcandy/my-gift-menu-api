@@ -2,6 +2,7 @@ package com.wx.gift.service;
 
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.vo.GomokuGameVo;
+import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
@@ -33,4 +34,13 @@ public interface MiniGameService {
     List<Map<String, Object>> gomokuLeaderboard(GomokuGameVo vo);
     Map<String, Object> saveRiverCrossingRecord(RiverCrossingVo vo);
     List<Map<String, Object>> riverCrossingLeaderboard(RiverCrossingVo vo);
+    Map<String, Object> createNimGame(NimGameVo vo);
+    Map<String, Object> joinNimGame(NimGameVo vo);
+    Map<String, Object> randomNimGame(NimGameVo vo);
+    Boolean cancelNimMatch(NimGameVo vo);
+    Map<String, Object> nimGameDetail(NimGameVo vo);
+    Map<String, Object> startNimGame(NimGameVo vo);
+    Map<String, Object> nimTake(NimGameVo vo);
+    Map<String, Object> restartNimGame(NimGameVo vo);
+    List<Map<String, Object>> nimLeaderboard(NimGameVo vo);
 }
