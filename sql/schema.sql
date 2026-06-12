@@ -392,3 +392,89 @@ CREATE TABLE IF NOT EXISTS t_gift_schulte_record (
   INDEX idx_family_difficulty_time (family_id, difficulty, start_time),
   INDEX idx_operator_open_id (operator_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_gift_word_pack (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  family_id INT NOT NULL,
+  owner_open_id VARCHAR(128) NOT NULL,
+  child_id INT,
+  name VARCHAR(128) NOT NULL,
+  grade VARCHAR(32),
+  semester VARCHAR(32),
+  source VARCHAR(64),
+  note VARCHAR(512),
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  create_time DATETIME NOT NULL,
+  modify_time DATETIME NOT NULL,
+  INDEX idx_family_child_status (family_id, child_id, status),
+  INDEX idx_owner_open_id (owner_open_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_gift_word_item (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  family_id INT NOT NULL,
+  pack_id INT NOT NULL,
+  word_text VARCHAR(64) NOT NULL,
+  pinyin VARCHAR(128),
+  hint VARCHAR(512),
+  phrases VARCHAR(512),
+  mistake_tip VARCHAR(512),
+  unit_name VARCHAR(64),
+  need_read TINYINT NOT NULL DEFAULT 1,
+  need_write TINYINT NOT NULL DEFAULT 1,
+  important TINYINT NOT NULL DEFAULT 0,
+  source VARCHAR(64),
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  create_time DATETIME NOT NULL,
+  modify_time DATETIME NOT NULL,
+  INDEX idx_pack_status (pack_id, status),
+  INDEX idx_family_word (family_id, word_text)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_gift_word_progress (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  family_id INT NOT NULL,
+  child_id INT NOT NULL,
+  word_id INT NOT NULL,
+  recognize_status VARCHAR(32) NOT NULL DEFAULT 'new',
+  read_status VARCHAR(32) NOT NULL DEFAULT 'new',
+  use_status VARCHAR(32) NOT NULL DEFAULT 'new',
+  write_status VARCHAR(32) NOT NULL DEFAULT 'new',
+  recognize_correct_streak INT NOT NULL DEFAULT 0,
+  read_correct_streak INT NOT NULL DEFAULT 0,
+  use_correct_streak INT NOT NULL DEFAULT 0,
+  write_correct_streak INT NOT NULL DEFAULT 0,
+  recognize_wrong_count INT NOT NULL DEFAULT 0,
+  read_wrong_count INT NOT NULL DEFAULT 0,
+  use_wrong_count INT NOT NULL DEFAULT 0,
+  write_wrong_count INT NOT NULL DEFAULT 0,
+  last_practiced_at DATETIME,
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  create_time DATETIME NOT NULL,
+  modify_time DATETIME NOT NULL,
+  UNIQUE KEY uk_child_word (child_id, word_id),
+  INDEX idx_family_child (family_id, child_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_gift_word_play_record (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  family_id INT NOT NULL,
+  child_id INT NOT NULL,
+  child_name VARCHAR(128) NOT NULL,
+  pack_id INT,
+  pack_name VARCHAR(128),
+  operator_open_id VARCHAR(128) NOT NULL,
+  mode VARCHAR(32) NOT NULL DEFAULT 'comprehensive',
+  total_count INT NOT NULL DEFAULT 0,
+  correct_count INT NOT NULL DEFAULT 0,
+  wrong_count INT NOT NULL DEFAULT 0,
+  write_pending_count INT NOT NULL DEFAULT 0,
+  summary_json TEXT,
+  note VARCHAR(512),
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  played_at DATETIME NOT NULL,
+  create_time DATETIME NOT NULL,
+  modify_time DATETIME NOT NULL,
+  INDEX idx_family_child_time (family_id, child_id, played_at),
+  INDEX idx_pack_time (pack_id, played_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
