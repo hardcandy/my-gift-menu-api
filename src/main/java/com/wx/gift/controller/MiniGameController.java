@@ -2,6 +2,7 @@ package com.wx.gift.controller;
 
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.service.MiniGameService;
+import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -91,5 +92,30 @@ public class MiniGameController {
     @RequestMapping("/word/wrongBook")
     public List<Map<String, Object>> wordWrongBook(@RequestBody WordDetectiveVo vo) {
         return miniGameService.wordWrongBook(vo);
+    }
+
+    @RequestMapping("/gomoku/create")
+    public Map<String, Object> createGomokuGame(@RequestBody GomokuGameVo vo) {
+        return miniGameService.createGomokuGame(vo);
+    }
+
+    @RequestMapping("/gomoku/join")
+    public Map<String, Object> joinGomokuGame(@RequestBody GomokuGameVo vo) {
+        return miniGameService.joinGomokuGame(vo);
+    }
+
+    @RequestMapping("/gomoku/detail")
+    public Map<String, Object> gomokuGameDetail(@RequestBody GomokuGameVo vo) {
+        return miniGameService.gomokuGameDetail(vo);
+    }
+
+    @RequestMapping("/gomoku/move")
+    public Map<String, Object> gomokuMove(@RequestBody GomokuGameVo vo) {
+        return miniGameService.gomokuMove(vo);
+    }
+
+    @RequestMapping("/gomoku/restart")
+    public Map<String, Object> restartGomokuGame(@RequestBody GomokuGameVo vo) {
+        return miniGameService.restartGomokuGame(vo);
     }
 }

@@ -1,6 +1,7 @@
 package com.wx.gift.service;
 
 import com.wx.gift.dto.SchulteRecordDTO;
+import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
 
@@ -23,4 +24,9 @@ public interface MiniGameService {
     Map<String, Object> saveWordPlayRecord(WordDetectiveVo vo);
     Map<String, Object> wordReport(WordDetectiveVo vo);
     List<Map<String, Object>> wordWrongBook(WordDetectiveVo vo);
+    Map<String, Object> createGomokuGame(GomokuGameVo vo);
+    Map<String, Object> joinGomokuGame(GomokuGameVo vo);
+    Map<String, Object> gomokuGameDetail(GomokuGameVo vo);
+    Map<String, Object> gomokuMove(GomokuGameVo vo);
+    Map<String, Object> restartGomokuGame(GomokuGameVo vo);
 }

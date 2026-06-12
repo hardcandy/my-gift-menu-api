@@ -397,6 +397,29 @@ CREATE TABLE IF NOT EXISTS t_gift_schulte_record (
   INDEX idx_operator_open_id (operator_open_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS t_gift_gomoku_game (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  family_id INT NOT NULL,
+  room_code VARCHAR(16) NOT NULL,
+  black_open_id VARCHAR(128) NOT NULL,
+  black_name VARCHAR(128) NOT NULL,
+  white_open_id VARCHAR(128),
+  white_name VARCHAR(128),
+  current_turn VARCHAR(16) NOT NULL DEFAULT 'black',
+  board_text VARCHAR(255) NOT NULL,
+  move_count INT NOT NULL DEFAULT 0,
+  last_move_index INT,
+  winner_open_id VARCHAR(128),
+  winner_name VARCHAR(128),
+  status VARCHAR(32) NOT NULL DEFAULT 'waiting',
+  create_time DATETIME NOT NULL,
+  modify_time DATETIME NOT NULL,
+  INDEX idx_room_code (room_code),
+  INDEX idx_family_status_time (family_id, status, modify_time),
+  INDEX idx_black_open_id (black_open_id),
+  INDEX idx_white_open_id (white_open_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS t_gift_word_pack (
   id INT PRIMARY KEY AUTO_INCREMENT,
   family_id INT NOT NULL,

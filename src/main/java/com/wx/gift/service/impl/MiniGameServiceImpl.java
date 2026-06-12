@@ -2,17 +2,21 @@ package com.wx.gift.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wx.gift.dto.SchulteRecordDTO;
+import com.wx.gift.mapper.BaseUserMapper;
 import com.wx.gift.mapper.ChildMapper;
 import com.wx.gift.mapper.FamilyMapper;
 import com.wx.gift.mapper.FamilyMemberMapper;
+import com.wx.gift.mapper.GomokuGameMapper;
 import com.wx.gift.mapper.SchulteRecordMapper;
 import com.wx.gift.mapper.WordItemMapper;
 import com.wx.gift.mapper.WordPackMapper;
 import com.wx.gift.mapper.WordPlayRecordMapper;
 import com.wx.gift.mapper.WordProgressMapper;
+import com.wx.gift.model.BaseUser;
 import com.wx.gift.model.Child;
 import com.wx.gift.model.Family;
 import com.wx.gift.model.FamilyMember;
+import com.wx.gift.model.GomokuGame;
 import com.wx.gift.model.SchulteRecord;
 import com.wx.gift.model.WordItem;
 import com.wx.gift.model.WordPack;
@@ -21,6 +25,7 @@ import com.wx.gift.model.WordProgress;
 import com.wx.gift.service.MiniGameService;
 import com.wx.gift.util.GsonUtil;
 import com.wx.gift.util.ValidatorUtil;
+import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
 import org.apache.commons.lang3.StringUtils;
@@ -39,10 +44,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Service
 public class MiniGameServiceImpl implements MiniGameService {
+    @Autowired
+    private BaseUserMapper baseUserMapper;
     @Autowired
     private SchulteRecordMapper schulteRecordMapper;
     @Autowired
@@ -51,6 +59,8 @@ public class MiniGameServiceImpl implements MiniGameService {
     private FamilyMemberMapper familyMemberMapper;
     @Autowired
     private ChildMapper childMapper;
+    @Autowired
+    private GomokuGameMapper gomokuGameMapper;
     @Autowired
     private WordPackMapper wordPackMapper;
     @Autowired
@@ -70,6 +80,13 @@ public class MiniGameServiceImpl implements MiniGameService {
         schulte.put("recommendedAge", "4岁+");
         schulte.put("difficulties", "2x2 / 3x3 / 4x4 / 5x5 / 6x6");
         list.add(schulte);
+        Map<String, Object> gomoku = new LinkedHashMap<>();
+        gomoku.put("key", "gomoku");
+        gomoku.put("name", "五子棋");
+        gomoku.put("summary", "双人在线对战 / 房间码加入 / 15x15 棋盘");
+        gomoku.put("recommendedAge", "6岁+");
+        gomoku.put("difficulties", "黑白轮流落子，先连五子获胜");
+        list.add(gomoku);
         Map<String, Object> word = new LinkedHashMap<>();
         word.put("key", "wordDetective");
         word.put("name", "字词小侦探");
@@ -166,6 +183,113 @@ public class MiniGameServiceImpl implements MiniGameService {
         record.setModifyTime(new Date());
         schulteRecordMapper.updateById(record);
         return true;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> createGomokuGame(GomokuGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        GomokuGame game = new GomokuGame();
+        game.setFamilyId(vo.getFamilyId());
+        game.setRoomCode(generateGomokuRoomCode());
+        game.setBlackOpenId(vo.getOpenId());
+        game.setBlackName(userName(vo.getOpenId()));
+        game.setCurrentTurn("black");
+        game.setBoardText(emptyGomokuBoard());
+        game.setMoveCount(0);
+        game.setLastMoveIndex(null);
+        game.setStatus("waiting");
+        game.setCreateTime(now);
+        game.setModifyTime(now);
+        gomokuGameMapper.insert(game);
+        return gomokuDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> joinGomokuGame(GomokuGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getRoomCode(), "请输入房间码");
+        GomokuGame game = requireGomokuGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(!"canceled".equals(game.getStatus()), "房间已关闭");
+        if (vo.getOpenId().equals(game.getBlackOpenId()) || vo.getOpenId().equals(game.getWhiteOpenId())) {
+            return gomokuDto(game, vo.getOpenId());
+        }
+        ValidatorUtil.checkArgument(StringUtils.isBlank(game.getWhiteOpenId()), "房间已经有两位玩家");
+        game.setWhiteOpenId(vo.getOpenId());
+        game.setWhiteName(userName(vo.getOpenId()));
+        game.setStatus("playing");
+        game.setModifyTime(new Date());
+        gomokuGameMapper.updateById(game);
+        return gomokuDto(game, vo.getOpenId());
+    }
+
+    @Override
+    public Map<String, Object> gomokuGameDetail(GomokuGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        GomokuGame game = requireGomokuGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        return gomokuDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> gomokuMove(GomokuGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getRow(), "请选择落子位置");
+        ValidatorUtil.checkNotNull(vo.getCol(), "请选择落子位置");
+        ValidatorUtil.checkArgument(vo.getRow() >= 0 && vo.getRow() < 15 && vo.getCol() >= 0 && vo.getCol() < 15, "落子位置不正确");
+        GomokuGame game = requireGomokuGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument("playing".equals(game.getStatus()), "棋局还不能落子");
+        String color = playerColor(game, vo.getOpenId());
+        ValidatorUtil.checkNotBlank(color, "你不是这局的玩家");
+        ValidatorUtil.checkArgument(color.equals(game.getCurrentTurn()), "还没轮到你");
+        int index = vo.getRow() * 15 + vo.getCol();
+        char[] board = StringUtils.defaultIfBlank(game.getBoardText(), emptyGomokuBoard()).toCharArray();
+        ValidatorUtil.checkArgument(board[index] == '.', "这里已经有棋子了");
+        char stone = "black".equals(color) ? 'B' : 'W';
+        board[index] = stone;
+        game.setBoardText(new String(board));
+        game.setMoveCount((game.getMoveCount() == null ? 0 : game.getMoveCount()) + 1);
+        game.setLastMoveIndex(index);
+        if (isGomokuWin(board, vo.getRow(), vo.getCol(), stone)) {
+            game.setStatus(color + "_win");
+            game.setWinnerOpenId(vo.getOpenId());
+            game.setWinnerName("black".equals(color) ? game.getBlackName() : game.getWhiteName());
+        } else if (game.getMoveCount() >= 225) {
+            game.setStatus("draw");
+            game.setWinnerOpenId("");
+            game.setWinnerName("");
+        } else {
+            game.setCurrentTurn("black".equals(color) ? "white" : "black");
+        }
+        game.setModifyTime(new Date());
+        gomokuGameMapper.updateById(game);
+        return gomokuDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> restartGomokuGame(GomokuGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        GomokuGame game = requireGomokuGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(StringUtils.isNotBlank(playerColor(game, vo.getOpenId())), "你不是这局的玩家");
+        game.setBoardText(emptyGomokuBoard());
+        game.setMoveCount(0);
+        game.setLastMoveIndex(null);
+        game.setWinnerOpenId("");
+        game.setWinnerName("");
+        game.setCurrentTurn("black");
+        game.setStatus(StringUtils.isNotBlank(game.getWhiteOpenId()) ? "playing" : "waiting");
+        game.setModifyTime(new Date());
+        gomokuGameMapper.updateById(game);
+        return gomokuDto(game, vo.getOpenId());
     }
 
     @Override
@@ -681,6 +805,102 @@ public class MiniGameServiceImpl implements MiniGameService {
         Integer limit = resolveLimit(vo.getLimit());
         if (limit != null) wrapper.last("limit " + limit);
         return schulteRecordMapper.selectList(wrapper);
+    }
+
+    private String generateGomokuRoomCode() {
+        for (int i = 0; i < 20; i++) {
+            String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
+            Long count = gomokuGameMapper.selectCount(new LambdaQueryWrapper<GomokuGame>()
+                    .eq(GomokuGame::getRoomCode, code)
+                    .in(GomokuGame::getStatus, "waiting", "playing")
+                    .last("limit 1"));
+            if (count == null || count == 0) return code;
+        }
+        return String.valueOf(System.currentTimeMillis()).substring(7, 13);
+    }
+
+    private GomokuGame requireGomokuGame(GomokuGameVo vo) {
+        GomokuGame game = null;
+        if (vo.getGameId() != null) {
+            game = gomokuGameMapper.selectById(vo.getGameId());
+        } else if (StringUtils.isNotBlank(vo.getRoomCode())) {
+            game = gomokuGameMapper.selectOne(new LambdaQueryWrapper<GomokuGame>()
+                    .eq(GomokuGame::getRoomCode, StringUtils.trim(vo.getRoomCode()))
+                    .ne(GomokuGame::getStatus, "deleted")
+                    .orderByDesc(GomokuGame::getId)
+                    .last("limit 1"));
+        }
+        ValidatorUtil.checkArgument(game != null && !"deleted".equals(game.getStatus()), "棋局不存在");
+        if (vo.getFamilyId() != null) {
+            ValidatorUtil.checkArgument(Objects.equals(game.getFamilyId(), vo.getFamilyId()), "棋局不在当前圈子");
+        }
+        return game;
+    }
+
+    private String emptyGomokuBoard() {
+        StringBuilder builder = new StringBuilder(225);
+        for (int i = 0; i < 225; i++) builder.append('.');
+        return builder.toString();
+    }
+
+    private String playerColor(GomokuGame game, String openId) {
+        if (openId != null && openId.equals(game.getBlackOpenId())) return "black";
+        if (openId != null && openId.equals(game.getWhiteOpenId())) return "white";
+        return "";
+    }
+
+    private String userName(String openId) {
+        BaseUser user = baseUserMapper.selectOne(new LambdaQueryWrapper<BaseUser>()
+                .eq(BaseUser::getOpenId, openId)
+                .last("limit 1"));
+        return user == null ? "棋手" : StringUtils.defaultIfBlank(user.getNickName(), "棋手");
+    }
+
+    private Map<String, Object> gomokuDto(GomokuGame game, String openId) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        String myColor = playerColor(game, openId);
+        map.put("id", game.getId());
+        map.put("familyId", game.getFamilyId());
+        map.put("roomCode", game.getRoomCode());
+        map.put("blackOpenId", game.getBlackOpenId());
+        map.put("blackName", game.getBlackName());
+        map.put("whiteOpenId", StringUtils.defaultString(game.getWhiteOpenId()));
+        map.put("whiteName", StringUtils.defaultString(game.getWhiteName()));
+        map.put("currentTurn", game.getCurrentTurn());
+        map.put("boardText", StringUtils.defaultIfBlank(game.getBoardText(), emptyGomokuBoard()));
+        map.put("moveCount", game.getMoveCount() == null ? 0 : game.getMoveCount());
+        map.put("lastMoveIndex", game.getLastMoveIndex());
+        map.put("winnerOpenId", StringUtils.defaultString(game.getWinnerOpenId()));
+        map.put("winnerName", StringUtils.defaultString(game.getWinnerName()));
+        map.put("status", game.getStatus());
+        map.put("myColor", myColor);
+        map.put("myTurn", "playing".equals(game.getStatus()) && StringUtils.isNotBlank(myColor) && myColor.equals(game.getCurrentTurn()));
+        map.put("createTime", game.getCreateTime());
+        map.put("modifyTime", game.getModifyTime());
+        return map;
+    }
+
+    private boolean isGomokuWin(char[] board, int row, int col, char stone) {
+        int[][] directions = new int[][]{{1, 0}, {0, 1}, {1, 1}, {1, -1}};
+        for (int[] direction : directions) {
+            int count = 1
+                    + countGomokuLine(board, row, col, direction[0], direction[1], stone)
+                    + countGomokuLine(board, row, col, -direction[0], -direction[1], stone);
+            if (count >= 5) return true;
+        }
+        return false;
+    }
+
+    private int countGomokuLine(char[] board, int row, int col, int rowStep, int colStep, char stone) {
+        int count = 0;
+        int r = row + rowStep;
+        int c = col + colStep;
+        while (r >= 0 && r < 15 && c >= 0 && c < 15 && board[r * 15 + c] == stone) {
+            count++;
+            r += rowStep;
+            c += colStep;
+        }
+        return count;
     }
 
     private void requireFamilyMember(Integer familyId, String openId) {
