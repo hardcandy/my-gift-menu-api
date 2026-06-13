@@ -2186,14 +2186,9 @@ public class MiniGameServiceImpl implements MiniGameService {
         if (elapsedSeconds < seconds) return false;
         List<Map<String, Object>> players = blokusPlayers(game);
         int currentSeat = game.getCurrentSeat() == null ? 1 : game.getCurrentSeat();
-        int passes = (game.getConsecutivePasses() == null ? 0 : game.getConsecutivePasses()) + 1;
-        game.setConsecutivePasses(passes);
         game.setTurnNo((game.getTurnNo() == null ? 0 : game.getTurnNo()) + 1);
-        if (passes >= players.size()) finishBlokus(game);
-        else {
-            game.setCurrentSeat(nextBlokusSeat(players, currentSeat));
-            game.setTurnStartedAt(now);
-        }
+        game.setCurrentSeat(nextBlokusSeat(players, currentSeat));
+        game.setTurnStartedAt(now);
         game.setModifyTime(now);
         return true;
     }
