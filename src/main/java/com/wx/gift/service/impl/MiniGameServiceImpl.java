@@ -762,7 +762,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         for (BlokusGame game : games) {
             Map<String, Object> scores = jsonMap(game.getScoresText());
             List<Map<String, Object>> players = blokusPlayers(game);
-            int maxScore = players.stream().mapToInt(player -> configInt(scores, String.valueOf(player.get("seat")))).max().orElse(0);
+            int maxScore = players.stream().mapToInt(player -> blokusScore(scores, player)).max().orElse(0);
             for (Map<String, Object> player : players) {
                 String openId = String.valueOf(player.get("openId"));
                 Map<String, Object> row = rows.computeIfAbsent(openId, k -> {
@@ -774,7 +774,7 @@ public class MiniGameServiceImpl implements MiniGameService {
                     v.put("score", 0);
                     return v;
                 });
-                int score = configInt(scores, String.valueOf(player.get("seat")));
+                int score = blokusScore(scores, player);
                 addInt(row, "playCount", 1);
                 addInt(row, "score", score);
                 if (score == maxScore) addInt(row, "winCount", 1);
@@ -2290,14 +2290,19 @@ public class MiniGameServiceImpl implements MiniGameService {
         Map<String, Object> scores = blokusScores(blokusBoard(game));
         game.setScoresText(GsonUtil.toJson(scores));
         List<Map<String, Object>> ranking = blokusPlayers(game).stream()
-                .sorted((a, b) -> Integer.compare(configInt(scores, String.valueOf(b.get("seat"))), configInt(scores, String.valueOf(a.get("seat")))))
+                .sorted((a, b) -> Integer.compare(blokusScore(scores, b), blokusScore(scores, a)))
                 .collect(Collectors.toList());
         List<String> rows = new ArrayList<>();
         for (int i = 0; i < ranking.size(); i++) {
             Map<String, Object> player = ranking.get(i);
-            rows.add("第" + (i + 1) + "名：" + player.get("name") + " " + configInt(scores, String.valueOf(player.get("seat"))) + "格");
+            rows.add("第" + (i + 1) + "名：" + player.get("name") + " " + blokusScore(scores, player) + "格");
         }
         game.setResultText(String.join("\n", rows));
+    }
+
+    private int blokusScore(Map<String, Object> scores, Map<String, Object> player) {
+        Integer seat = toInt(player.get("seat"));
+        return seat == null ? 0 : configInt(scores, String.valueOf(seat));
     }
 
     private Map<String, Object> blokusDto(BlokusGame game, String openId) {
