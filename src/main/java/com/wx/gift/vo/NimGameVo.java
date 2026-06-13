@@ -12,4 +12,7 @@ public class NimGameVo {
     private String roomCode;
     private Integer takeCount;
     private Integer limit;
+    private String winnerType;
+    private Integer totalRounds;
+    private String moveHistory;
 }

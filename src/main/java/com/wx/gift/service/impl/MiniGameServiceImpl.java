@@ -100,7 +100,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         Map<String, Object> nim = new LinkedHashMap<>();
         nim.put("key", "nim");
         nim.put("name", "取石子大作战");
-        nim.put("summary", "联网双人对战 / 随机匹配 / 1-3颗策略博弈");
+        nim.put("summary", "单机练习 / 联网双人 / 随机匹配");
         nim.put("recommendedAge", "6岁+");
         nim.put("difficulties", "21颗石子，拿最后一颗获胜");
         list.add(nim);
@@ -541,6 +541,31 @@ public class MiniGameServiceImpl implements MiniGameService {
         if ("PLAYING".equals(game.getStatus())) {
             startNim(game, old.getGuestOpenId());
         }
+        nimGameMapper.insert(game);
+        return nimDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> saveNimSoloGame(NimGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        String computerOpenId = "__nim_computer__";
+        boolean computerWin = "computer".equalsIgnoreCase(StringUtils.defaultString(vo.getWinnerType()));
+        NimGame game = newNimGame(vo.getFamilyId(), vo.getOpenId(), "SINGLE", "FINISHED");
+        game.setGuestOpenId(computerOpenId);
+        game.setGuestName("电脑");
+        game.setCurrentTurnOpenId("");
+        game.setWinnerOpenId(computerWin ? computerOpenId : vo.getOpenId());
+        game.setWinnerName(computerWin ? "电脑" : game.getHostName());
+        game.setRemainingStones(0);
+        game.setTotalRounds(vo.getTotalRounds() == null ? 0 : Math.max(0, vo.getTotalRounds()));
+        game.setMoveHistory(StringUtils.defaultIfBlank(vo.getMoveHistory(), "[]"));
+        game.setStartedAt(now);
+        game.setFinishedAt(now);
+        game.setModifyTime(now);
         nimGameMapper.insert(game);
         return nimDto(game, vo.getOpenId());
     }
@@ -1242,6 +1267,7 @@ public class MiniGameServiceImpl implements MiniGameService {
 
     private void addNimPlayer(Map<String, Map<String, Object>> rows, String openId, String name) {
         if (StringUtils.isBlank(openId)) return;
+        if ("__nim_computer__".equals(openId)) return;
         rows.computeIfAbsent(openId, key -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("openId", key);

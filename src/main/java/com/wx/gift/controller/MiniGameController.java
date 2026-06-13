@@ -176,6 +176,11 @@ public class MiniGameController {
         return miniGameService.restartNimGame(vo);
     }
 
+    @RequestMapping("/nim/saveSolo")
+    public Map<String, Object> saveNimSoloGame(@RequestBody NimGameVo vo) {
+        return miniGameService.saveNimSoloGame(vo);
+    }
+
     @RequestMapping("/nim/leaderboard")
     public List<Map<String, Object>> nimLeaderboard(@RequestBody NimGameVo vo) {
         return miniGameService.nimLeaderboard(vo);

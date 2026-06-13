@@ -42,5 +42,6 @@ public interface MiniGameService {
     Map<String, Object> startNimGame(NimGameVo vo);
     Map<String, Object> nimTake(NimGameVo vo);
     Map<String, Object> restartNimGame(NimGameVo vo);
+    Map<String, Object> saveNimSoloGame(NimGameVo vo);
     List<Map<String, Object>> nimLeaderboard(NimGameVo vo);
 }
