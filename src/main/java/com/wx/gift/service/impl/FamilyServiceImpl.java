@@ -34,6 +34,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class FamilyServiceImpl implements FamilyService {
+    private static final String PUBLIC_CIRCLE_NAME = "What's in the Box 大圈子";
     @Autowired
     private FamilyMapper familyMapper;
     @Autowired
@@ -55,7 +56,7 @@ public class FamilyServiceImpl implements FamilyService {
         if (family != null) {
             return family;
         }
-        return createFamily(vo);
+        return ensureDefaultPublicCircle(vo.getOpenId());
     }
 
     @Override
@@ -81,18 +82,23 @@ public class FamilyServiceImpl implements FamilyService {
     @Override
     public List<Map<String, Object>> listFamilies(String openId) {
         ValidatorUtil.checkNotBlank(openId, "openId 不能为空");
+        Family publicCircle = ensureDefaultPublicCircle(openId);
         List<Map<String, Object>> result = new java.util.ArrayList<>();
+        result.add(toFamilyMap(publicCircle, openId.equals(publicCircle.getOwnerOpenId()) ? "owner" : "member",
+                openId.equals(publicCircle.getOwnerOpenId()) ? ownerRole(publicCircle) : "relative"));
         List<Family> owned = familyMapper.selectList(new LambdaQueryWrapper<Family>()
                 .eq(Family::getOwnerOpenId, openId)
                 .eq(Family::getStatus, "active")
                 .orderByDesc(Family::getId));
         for (Family family : owned) {
-            result.add(toFamilyMap(family, "owner", ownerRole(family)));
+            if (!"public".equals(family.getCircleType())) {
+                result.add(toFamilyMap(family, "owner", ownerRole(family)));
+            }
         }
         List<FamilyMember> memberships = familyMemberMapper.selectList(new LambdaQueryWrapper<FamilyMember>().eq(FamilyMember::getMemberOpenId, openId).orderByDesc(FamilyMember::getId));
         for (FamilyMember member : memberships) {
             Family family = familyMapper.selectById(member.getFamilyId());
-            if (isActiveFamily(family) && !openId.equals(family.getOwnerOpenId())) {
+            if (isActiveFamily(family) && !"public".equals(family.getCircleType()) && !openId.equals(family.getOwnerOpenId())) {
                 result.add(toFamilyMap(family, "member", StringUtils.defaultIfBlank(member.getMemberRole(), "relative")));
             }
         }
@@ -104,6 +110,7 @@ public class FamilyServiceImpl implements FamilyService {
         Family owned = familyMapper.selectOne(new LambdaQueryWrapper<Family>()
                 .eq(Family::getOwnerOpenId, openId)
                 .eq(Family::getStatus, "active")
+                .ne(Family::getCircleType, "public")
                 .last("limit 1"));
         if (owned != null) {
             return owned;
@@ -154,6 +161,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         Family family = familyMapper.selectById(vo.getFamilyId());
         ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
+        ValidatorUtil.checkArgument(!"public".equals(family.getCircleType()), "公共大圈子不能退出");
         ValidatorUtil.checkArgument(!vo.getOpenId().equals(family.getOwnerOpenId()), "圈主不能直接退出自己创建的圈子");
         familyMemberMapper.delete(new LambdaQueryWrapper<FamilyMember>()
                 .eq(FamilyMember::getFamilyId, vo.getFamilyId())
@@ -167,6 +175,7 @@ public class FamilyServiceImpl implements FamilyService {
         ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
         Family family = familyMapper.selectById(vo.getFamilyId());
         ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
+        ValidatorUtil.checkArgument(!"public".equals(family.getCircleType()), "公共大圈子不能删除");
         ValidatorUtil.checkArgument(vo.getOpenId().equals(family.getOwnerOpenId()), "只有圈主可以删除圈子");
         family.setStatus("deleted");
         family.setModifyTime(new Date());
@@ -373,9 +382,46 @@ public class FamilyServiceImpl implements FamilyService {
         map.put("ownerOpenId", family.getOwnerOpenId());
         map.put("relation", relation);
         map.put("memberRole", role);
+        map.put("memberCount", memberCount(family));
         map.put("createTime", family.getCreateTime());
         map.put("modifyTime", family.getModifyTime());
         return map;
+    }
+
+    private Family ensureDefaultPublicCircle(String openId) {
+        Family family = familyMapper.selectOne(new LambdaQueryWrapper<Family>()
+                .eq(Family::getCircleType, "public")
+                .eq(Family::getStatus, "active")
+                .orderByAsc(Family::getId)
+                .last("limit 1"));
+        if (family == null) {
+            Date now = new Date();
+            family = new Family();
+            family.setFamilyName(PUBLIC_CIRCLE_NAME);
+            family.setCircleType("public");
+            family.setOwnerOpenId(openId);
+            family.setOwnerRole("owner");
+            family.setStatus("active");
+            family.setCreateTime(now);
+            family.setModifyTime(now);
+            familyMapper.insert(family);
+            return familyMapper.selectById(family.getId());
+        }
+        if (!openId.equals(family.getOwnerOpenId())) {
+            FamilyJoinVo joinVo = new FamilyJoinVo();
+            joinVo.setOpenId(openId);
+            joinVo.setFamilyId(family.getId());
+            joinVo.setRole("relative");
+            joinFamily(joinVo);
+        }
+        return family;
+    }
+
+    private int memberCount(Family family) {
+        if (family == null || family.getId() == null) return 0;
+        Long count = familyMemberMapper.selectCount(new LambdaQueryWrapper<FamilyMember>()
+                .eq(FamilyMember::getFamilyId, family.getId()));
+        return 1 + (count == null ? 0 : count.intValue());
     }
 
     private String ownerRole(Family family) {
@@ -409,6 +455,9 @@ public class FamilyServiceImpl implements FamilyService {
         Family family = familyMapper.selectById(familyId);
         if (!isActiveFamily(family)) {
             return false;
+        }
+        if ("public".equals(family.getCircleType())) {
+            return openId.equals(family.getOwnerOpenId());
         }
         return openId.equals(family.getOwnerOpenId()) || isCircleMember(familyId, openId);
     }
@@ -454,6 +503,9 @@ public class FamilyServiceImpl implements FamilyService {
         }
         Family family = familyMapper.selectById(targetFamilyId);
         ValidatorUtil.checkArgument(isActiveFamily(family), "圈子不存在");
+        if ("public".equals(family.getCircleType()) && !openId.equals(family.getOwnerOpenId())) {
+            return java.util.Collections.singletonList(toMemberMap(openId, "relative", false));
+        }
         ValidatorUtil.checkArgument(canApprove(targetFamilyId, openId), "只有圈内成员可以查看成员");
         List<Map<String, Object>> members = new java.util.ArrayList<>();
         members.add(toMemberMap(family.getOwnerOpenId(), ownerRole(family), true));
