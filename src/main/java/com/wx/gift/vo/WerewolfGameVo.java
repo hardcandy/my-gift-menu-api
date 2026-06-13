@@ -13,6 +13,8 @@ public class WerewolfGameVo {
     private String actionType;
     private String targetOpenId;
     private String speechText;
+    private String speechVoiceFileId;
+    private Integer speechDurationMs;
     private Integer playerCount;
     private Integer wolfCount;
     private Integer seerCount;

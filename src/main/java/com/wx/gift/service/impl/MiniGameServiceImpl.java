@@ -881,6 +881,8 @@ public class MiniGameServiceImpl implements MiniGameService {
         action.put("openId", vo.getOpenId());
         action.put("targetOpenId", StringUtils.defaultString(vo.getTargetOpenId()));
         action.put("text", StringUtils.defaultString(vo.getSpeechText()));
+        action.put("voiceFileId", StringUtils.defaultString(vo.getSpeechVoiceFileId()));
+        action.put("durationMs", vo.getSpeechDurationMs() == null ? 0 : Math.max(0, vo.getSpeechDurationMs()));
         if ("NIGHT_WOLF".equals(phase)) {
             ValidatorUtil.checkArgument("wolf".equals(role), "等待狼人行动");
             ValidatorUtil.checkNotBlank(vo.getTargetOpenId(), "请选择目标");
