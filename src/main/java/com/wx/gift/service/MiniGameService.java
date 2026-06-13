@@ -3,6 +3,7 @@ package com.wx.gift.service;
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
+import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
@@ -44,4 +45,14 @@ public interface MiniGameService {
     Map<String, Object> restartNimGame(NimGameVo vo);
     Map<String, Object> saveNimSoloGame(NimGameVo vo);
     List<Map<String, Object>> nimLeaderboard(NimGameVo vo);
+    Map<String, Object> createPrisonerGame(PrisonerGameVo vo);
+    Map<String, Object> joinPrisonerGame(PrisonerGameVo vo);
+    Map<String, Object> randomPrisonerGame(PrisonerGameVo vo);
+    Boolean cancelPrisonerMatch(PrisonerGameVo vo);
+    Map<String, Object> prisonerGameDetail(PrisonerGameVo vo);
+    Map<String, Object> startPrisonerGame(PrisonerGameVo vo);
+    Map<String, Object> prisonerChoose(PrisonerGameVo vo);
+    Map<String, Object> restartPrisonerGame(PrisonerGameVo vo);
+    Map<String, Object> savePrisonerSoloGame(PrisonerGameVo vo);
+    List<Map<String, Object>> prisonerLeaderboard(PrisonerGameVo vo);
 }

@@ -8,6 +8,7 @@ import com.wx.gift.mapper.FamilyMapper;
 import com.wx.gift.mapper.FamilyMemberMapper;
 import com.wx.gift.mapper.GomokuGameMapper;
 import com.wx.gift.mapper.NimGameMapper;
+import com.wx.gift.mapper.PrisonerGameMapper;
 import com.wx.gift.mapper.RiverCrossingRecordMapper;
 import com.wx.gift.mapper.SchulteRecordMapper;
 import com.wx.gift.mapper.WordItemMapper;
@@ -20,6 +21,7 @@ import com.wx.gift.model.Family;
 import com.wx.gift.model.FamilyMember;
 import com.wx.gift.model.GomokuGame;
 import com.wx.gift.model.NimGame;
+import com.wx.gift.model.PrisonerGame;
 import com.wx.gift.model.RiverCrossingRecord;
 import com.wx.gift.model.SchulteRecord;
 import com.wx.gift.model.WordItem;
@@ -31,6 +33,7 @@ import com.wx.gift.util.GsonUtil;
 import com.wx.gift.util.ValidatorUtil;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
+import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
@@ -70,6 +73,8 @@ public class MiniGameServiceImpl implements MiniGameService {
     @Autowired
     private NimGameMapper nimGameMapper;
     @Autowired
+    private PrisonerGameMapper prisonerGameMapper;
+    @Autowired
     private RiverCrossingRecordMapper riverCrossingRecordMapper;
     @Autowired
     private WordPackMapper wordPackMapper;
@@ -104,6 +109,13 @@ public class MiniGameServiceImpl implements MiniGameService {
         nim.put("recommendedAge", "6岁+");
         nim.put("difficulties", "21颗石子，拿最后一颗获胜");
         list.add(nim);
+        Map<String, Object> prisoner = new LinkedHashMap<>();
+        prisoner.put("key", "prisoner");
+        prisoner.put("name", "合作还是背叛");
+        prisoner.put("summary", "单人 AI / 双人房间 / 同时选择");
+        prisoner.put("recommendedAge", "7岁+");
+        prisoner.put("difficulties", "10轮博弈，总分更高获胜");
+        list.add(prisoner);
         Map<String, Object> word = new LinkedHashMap<>();
         word.put("key", "wordDetective");
         word.put("name", "字词小侦探");
@@ -596,6 +608,206 @@ public class MiniGameServiceImpl implements MiniGameService {
                 .sorted((a, b) -> {
                     int win = ((Integer) b.get("winCount")).compareTo((Integer) a.get("winCount"));
                     if (win != 0) return win;
+                    return ((Integer) a.get("playCount")).compareTo((Integer) b.get("playCount"));
+                })
+                .limit(resolveLimit(vo.getLimit()) == null ? 20 : resolveLimit(vo.getLimit()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public Map<String, Object> createPrisonerGame(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        PrisonerGame game = newPrisonerGame(vo.getFamilyId(), vo.getOpenId(), "ROOM", "WAITING");
+        prisonerGameMapper.insert(game);
+        return prisonerDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> joinPrisonerGame(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getRoomCode(), "请输入房间号");
+        PrisonerGame game = requirePrisonerGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(!"PLAYING".equals(game.getStatus()), "游戏已开始，无法加入");
+        ValidatorUtil.checkArgument(!"FINISHED".equals(game.getStatus()) && !"CLOSED".equals(game.getStatus()), "房间已结束");
+        if (vo.getOpenId().equals(game.getHostOpenId()) || vo.getOpenId().equals(game.getGuestOpenId())) {
+            return prisonerDto(game, vo.getOpenId());
+        }
+        ValidatorUtil.checkArgument(StringUtils.isBlank(game.getGuestOpenId()), "房间已满");
+        game.setGuestOpenId(vo.getOpenId());
+        game.setGuestName(userName(vo.getOpenId()));
+        game.setStatus("READY");
+        game.setModifyTime(new Date());
+        prisonerGameMapper.updateById(game);
+        return prisonerDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> randomPrisonerGame(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        closeMyMatchingPrisoner(vo.getFamilyId(), vo.getOpenId());
+        PrisonerGame waiting = prisonerGameMapper.selectOne(new LambdaQueryWrapper<PrisonerGame>()
+                .eq(PrisonerGame::getFamilyId, vo.getFamilyId())
+                .eq(PrisonerGame::getRoomType, "RANDOM")
+                .eq(PrisonerGame::getStatus, "MATCHING")
+                .ne(PrisonerGame::getHostOpenId, vo.getOpenId())
+                .orderByAsc(PrisonerGame::getCreateTime)
+                .last("limit 1"));
+        if (waiting == null) {
+            PrisonerGame game = newPrisonerGame(vo.getFamilyId(), vo.getOpenId(), "RANDOM", "MATCHING");
+            prisonerGameMapper.insert(game);
+            return prisonerDto(game, vo.getOpenId());
+        }
+        waiting.setGuestOpenId(vo.getOpenId());
+        waiting.setGuestName(userName(vo.getOpenId()));
+        startPrisoner(waiting);
+        prisonerGameMapper.updateById(waiting);
+        return prisonerDto(waiting, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean cancelPrisonerMatch(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        if (vo.getFamilyId() == null) return true;
+        closeMyMatchingPrisoner(vo.getFamilyId(), vo.getOpenId());
+        return true;
+    }
+
+    @Override
+    public Map<String, Object> prisonerGameDetail(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        PrisonerGame game = requirePrisonerGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        return prisonerDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> startPrisonerGame(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        PrisonerGame game = requirePrisonerGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以开始");
+        ValidatorUtil.checkArgument(StringUtils.isNotBlank(game.getGuestOpenId()), "需要两位玩家才能开始");
+        ValidatorUtil.checkArgument("READY".equals(game.getStatus()) || "WAITING".equals(game.getStatus()), "当前房间不能开始");
+        startPrisoner(game);
+        prisonerGameMapper.updateById(game);
+        return prisonerDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> prisonerChoose(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        String choice = normalizePrisonerChoice(vo.getChoice());
+        ValidatorUtil.checkNotBlank(choice, "请选择合作或背叛");
+        PrisonerGame game = requirePrisonerGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument("PLAYING".equals(game.getStatus()), "游戏未开始");
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()) || vo.getOpenId().equals(game.getGuestOpenId()), "你不是这局玩家");
+        if (vo.getOpenId().equals(game.getHostOpenId())) {
+            ValidatorUtil.checkArgument(StringUtils.isBlank(game.getHostChoice()), "本轮已经选择");
+            game.setHostChoice(choice);
+        } else {
+            ValidatorUtil.checkArgument(StringUtils.isBlank(game.getGuestChoice()), "本轮已经选择");
+            game.setGuestChoice(choice);
+        }
+        if (StringUtils.isNotBlank(game.getHostChoice()) && StringUtils.isNotBlank(game.getGuestChoice())) {
+            settlePrisonerRound(game);
+        }
+        game.setModifyTime(new Date());
+        prisonerGameMapper.updateById(game);
+        return prisonerDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> restartPrisonerGame(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        PrisonerGame old = requirePrisonerGame(vo);
+        requireFamilyMember(old.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(old.getHostOpenId()) || vo.getOpenId().equals(old.getGuestOpenId()), "你不是这局玩家");
+        PrisonerGame game = newPrisonerGame(old.getFamilyId(), old.getHostOpenId(), old.getRoomType(), StringUtils.isNotBlank(old.getGuestOpenId()) ? "PLAYING" : "WAITING");
+        game.setRoomCode(old.getRoomCode());
+        game.setGuestOpenId(old.getGuestOpenId());
+        game.setGuestName(old.getGuestName());
+        if ("PLAYING".equals(game.getStatus())) startPrisoner(game);
+        prisonerGameMapper.insert(game);
+        return prisonerDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> savePrisonerSoloGame(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        String computerOpenId = "__prisoner_ai__";
+        PrisonerGame game = newPrisonerGame(vo.getFamilyId(), vo.getOpenId(), "SINGLE", "FINISHED");
+        game.setGuestOpenId(computerOpenId);
+        game.setGuestName(StringUtils.defaultIfBlank(vo.getAiName(), "电脑"));
+        game.setTotalRounds(vo.getTotalRounds() == null ? 10 : Math.max(1, vo.getTotalRounds()));
+        game.setCurrentRound(game.getTotalRounds());
+        game.setHostScore(vo.getHostScore() == null ? 0 : Math.max(0, vo.getHostScore()));
+        game.setGuestScore(vo.getGuestScore() == null ? 0 : Math.max(0, vo.getGuestScore()));
+        String winnerType = StringUtils.defaultString(vo.getWinnerType());
+        if ("player".equalsIgnoreCase(winnerType)) {
+            game.setWinnerOpenId(vo.getOpenId());
+            game.setWinnerName(game.getHostName());
+            game.setResultType("WIN");
+        } else if ("computer".equalsIgnoreCase(winnerType)) {
+            game.setWinnerOpenId(computerOpenId);
+            game.setWinnerName(game.getGuestName());
+            game.setResultType("LOSE");
+        } else {
+            game.setWinnerOpenId("");
+            game.setWinnerName("");
+            game.setResultType("DRAW");
+        }
+        game.setHostChoice("");
+        game.setGuestChoice("");
+        game.setRoundHistory(StringUtils.defaultIfBlank(vo.getRoundHistory(), "[]"));
+        game.setStartedAt(now);
+        game.setFinishedAt(now);
+        game.setModifyTime(now);
+        prisonerGameMapper.insert(game);
+        return prisonerDto(game, vo.getOpenId());
+    }
+
+    @Override
+    public List<Map<String, Object>> prisonerLeaderboard(PrisonerGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        List<PrisonerGame> games = prisonerGameMapper.selectList(new LambdaQueryWrapper<PrisonerGame>()
+                .eq(PrisonerGame::getFamilyId, vo.getFamilyId())
+                .eq(PrisonerGame::getStatus, "FINISHED")
+                .orderByDesc(PrisonerGame::getFinishedAt));
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        for (PrisonerGame game : games) {
+            addPrisonerPlayer(rows, game.getHostOpenId(), game.getHostName());
+            addPrisonerPlayer(rows, game.getGuestOpenId(), game.getGuestName());
+            addInt(rows.get(game.getHostOpenId()), "playCount", 1);
+            addInt(rows.get(game.getGuestOpenId()), "playCount", 1);
+            addInt(rows.get(game.getHostOpenId()), "score", game.getHostScore() == null ? 0 : game.getHostScore());
+            addInt(rows.get(game.getGuestOpenId()), "score", game.getGuestScore() == null ? 0 : game.getGuestScore());
+            if (StringUtils.isNotBlank(game.getWinnerOpenId())) addInt(rows.get(game.getWinnerOpenId()), "winCount", 1);
+        }
+        return rows.values().stream()
+                .filter(row -> StringUtils.isNotBlank((String) row.get("openId")))
+                .sorted((a, b) -> {
+                    int win = ((Integer) b.get("winCount")).compareTo((Integer) a.get("winCount"));
+                    if (win != 0) return win;
+                    int score = ((Integer) b.get("score")).compareTo((Integer) a.get("score"));
+                    if (score != 0) return score;
                     return ((Integer) a.get("playCount")).compareTo((Integer) b.get("playCount"));
                 })
                 .limit(resolveLimit(vo.getLimit()) == null ? 20 : resolveLimit(vo.getLimit()))
@@ -1278,6 +1490,221 @@ public class MiniGameServiceImpl implements MiniGameService {
             row.put("name", StringUtils.defaultIfBlank(name, "玩家"));
             row.put("playCount", 0);
             row.put("winCount", 0);
+            return row;
+        });
+    }
+
+    private PrisonerGame newPrisonerGame(Integer familyId, String hostOpenId, String roomType, String status) {
+        Date now = new Date();
+        PrisonerGame game = new PrisonerGame();
+        game.setFamilyId(familyId);
+        game.setRoomCode(generatePrisonerRoomCode());
+        game.setRoomType(roomType);
+        game.setHostOpenId(hostOpenId);
+        game.setHostName(userName(hostOpenId));
+        game.setCurrentRound(1);
+        game.setTotalRounds(10);
+        game.setHostScore(0);
+        game.setGuestScore(0);
+        game.setHostChoice("");
+        game.setGuestChoice("");
+        game.setWinnerOpenId("");
+        game.setWinnerName("");
+        game.setResultType("");
+        game.setRoundHistory("[]");
+        game.setStatus(status);
+        game.setCreateTime(now);
+        game.setModifyTime(now);
+        return game;
+    }
+
+    private String generatePrisonerRoomCode() {
+        for (int i = 0; i < 20; i++) {
+            String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
+            Long count = prisonerGameMapper.selectCount(new LambdaQueryWrapper<PrisonerGame>()
+                    .eq(PrisonerGame::getRoomCode, code)
+                    .in(PrisonerGame::getStatus, "WAITING", "MATCHING", "READY", "PLAYING")
+                    .last("limit 1"));
+            if (count == null || count == 0) return code;
+        }
+        return String.valueOf(System.currentTimeMillis()).substring(7, 13);
+    }
+
+    private void closeMyMatchingPrisoner(Integer familyId, String openId) {
+        prisonerGameMapper.selectList(new LambdaQueryWrapper<PrisonerGame>()
+                .eq(PrisonerGame::getFamilyId, familyId)
+                .eq(PrisonerGame::getRoomType, "RANDOM")
+                .eq(PrisonerGame::getStatus, "MATCHING")
+                .eq(PrisonerGame::getHostOpenId, openId))
+                .forEach(game -> {
+                    game.setStatus("CLOSED");
+                    game.setModifyTime(new Date());
+                    prisonerGameMapper.updateById(game);
+                });
+    }
+
+    private PrisonerGame requirePrisonerGame(PrisonerGameVo vo) {
+        PrisonerGame game = null;
+        if (vo.getGameId() != null) {
+            game = prisonerGameMapper.selectById(vo.getGameId());
+        } else if (StringUtils.isNotBlank(vo.getRoomCode())) {
+            game = prisonerGameMapper.selectOne(new LambdaQueryWrapper<PrisonerGame>()
+                    .eq(PrisonerGame::getRoomCode, StringUtils.trim(vo.getRoomCode()))
+                    .ne(PrisonerGame::getStatus, "CLOSED")
+                    .orderByDesc(PrisonerGame::getId)
+                    .last("limit 1"));
+        }
+        ValidatorUtil.checkNotNull(game, "房间不存在");
+        if (vo.getFamilyId() != null) ValidatorUtil.checkArgument(Objects.equals(game.getFamilyId(), vo.getFamilyId()), "房间不在当前圈子");
+        return game;
+    }
+
+    private void startPrisoner(PrisonerGame game) {
+        Date now = new Date();
+        game.setStatus("PLAYING");
+        game.setCurrentRound(1);
+        game.setHostScore(0);
+        game.setGuestScore(0);
+        game.setHostChoice("");
+        game.setGuestChoice("");
+        game.setWinnerOpenId("");
+        game.setWinnerName("");
+        game.setResultType("");
+        game.setRoundHistory("[]");
+        game.setStartedAt(now);
+        game.setFinishedAt(null);
+        game.setModifyTime(now);
+    }
+
+    private String normalizePrisonerChoice(String choice) {
+        String value = StringUtils.lowerCase(StringUtils.trim(choice));
+        if ("cooperate".equals(value) || "c".equals(value)) return "cooperate";
+        if ("betray".equals(value) || "defect".equals(value) || "d".equals(value)) return "betray";
+        return "";
+    }
+
+    private void settlePrisonerRound(PrisonerGame game) {
+        String hostChoice = normalizePrisonerChoice(game.getHostChoice());
+        String guestChoice = normalizePrisonerChoice(game.getGuestChoice());
+        int hostPoint;
+        int guestPoint;
+        if ("cooperate".equals(hostChoice) && "cooperate".equals(guestChoice)) {
+            hostPoint = 3;
+            guestPoint = 3;
+        } else if ("cooperate".equals(hostChoice)) {
+            hostPoint = 0;
+            guestPoint = 5;
+        } else if ("cooperate".equals(guestChoice)) {
+            hostPoint = 5;
+            guestPoint = 0;
+        } else {
+            hostPoint = 1;
+            guestPoint = 1;
+        }
+        int round = game.getCurrentRound() == null ? 1 : game.getCurrentRound();
+        game.setHostScore((game.getHostScore() == null ? 0 : game.getHostScore()) + hostPoint);
+        game.setGuestScore((game.getGuestScore() == null ? 0 : game.getGuestScore()) + guestPoint);
+        game.setRoundHistory(appendPrisonerRound(game.getRoundHistory(), round, hostChoice, guestChoice, hostPoint, guestPoint, game.getHostScore(), game.getGuestScore()));
+        if (round >= (game.getTotalRounds() == null ? 10 : game.getTotalRounds())) {
+            finishPrisoner(game);
+        } else {
+            game.setCurrentRound(round + 1);
+            game.setHostChoice("");
+            game.setGuestChoice("");
+        }
+    }
+
+    private void finishPrisoner(PrisonerGame game) {
+        game.setStatus("FINISHED");
+        if ((game.getHostScore() == null ? 0 : game.getHostScore()) > (game.getGuestScore() == null ? 0 : game.getGuestScore())) {
+            game.setWinnerOpenId(game.getHostOpenId());
+            game.setWinnerName(game.getHostName());
+            game.setResultType("HOST_WIN");
+        } else if ((game.getGuestScore() == null ? 0 : game.getGuestScore()) > (game.getHostScore() == null ? 0 : game.getHostScore())) {
+            game.setWinnerOpenId(game.getGuestOpenId());
+            game.setWinnerName(game.getGuestName());
+            game.setResultType("GUEST_WIN");
+        } else {
+            game.setWinnerOpenId("");
+            game.setWinnerName("");
+            game.setResultType("DRAW");
+        }
+        game.setHostChoice("");
+        game.setGuestChoice("");
+        game.setFinishedAt(new Date());
+    }
+
+    @SuppressWarnings("unchecked")
+    private String appendPrisonerRound(String historyText, int round, String hostChoice, String guestChoice, int hostPoint, int guestPoint, int hostScore, int guestScore) {
+        List<Map<String, Object>> rounds;
+        try {
+            rounds = GsonUtil.fromJson(StringUtils.defaultIfBlank(historyText, "[]"), List.class);
+        } catch (Exception e) {
+            rounds = new ArrayList<>();
+        }
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("round", round);
+        item.put("hostChoice", hostChoice);
+        item.put("guestChoice", guestChoice);
+        item.put("hostPoint", hostPoint);
+        item.put("guestPoint", guestPoint);
+        item.put("hostScore", hostScore);
+        item.put("guestScore", guestScore);
+        item.put("createdAt", System.currentTimeMillis());
+        rounds.add(item);
+        return GsonUtil.toJson(rounds);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> prisonerRounds(String historyText) {
+        try {
+            return GsonUtil.fromJson(StringUtils.defaultIfBlank(historyText, "[]"), List.class);
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private Map<String, Object> prisonerDto(PrisonerGame game, String openId) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", game.getId());
+        map.put("familyId", game.getFamilyId());
+        map.put("roomCode", game.getRoomCode());
+        map.put("roomType", game.getRoomType());
+        map.put("hostOpenId", game.getHostOpenId());
+        map.put("hostName", game.getHostName());
+        map.put("guestOpenId", StringUtils.defaultString(game.getGuestOpenId()));
+        map.put("guestName", StringUtils.defaultString(game.getGuestName()));
+        map.put("currentRound", game.getCurrentRound());
+        map.put("totalRounds", game.getTotalRounds());
+        map.put("hostScore", game.getHostScore());
+        map.put("guestScore", game.getGuestScore());
+        map.put("winnerOpenId", StringUtils.defaultString(game.getWinnerOpenId()));
+        map.put("winnerName", StringUtils.defaultString(game.getWinnerName()));
+        map.put("resultType", StringUtils.defaultString(game.getResultType()));
+        map.put("roundHistory", prisonerRounds(game.getRoundHistory()));
+        map.put("status", game.getStatus());
+        map.put("isHost", openId != null && openId.equals(game.getHostOpenId()));
+        map.put("isPlayer", openId != null && (openId.equals(game.getHostOpenId()) || openId.equals(game.getGuestOpenId())));
+        map.put("myChoice", openId != null && openId.equals(game.getHostOpenId()) ? StringUtils.defaultString(game.getHostChoice()) : (openId != null && openId.equals(game.getGuestOpenId()) ? StringUtils.defaultString(game.getGuestChoice()) : ""));
+        map.put("opponentChosen", openId != null && openId.equals(game.getHostOpenId()) ? StringUtils.isNotBlank(game.getGuestChoice()) : StringUtils.isNotBlank(game.getHostChoice()));
+        map.put("matched", "PLAYING".equals(game.getStatus()) || "READY".equals(game.getStatus()));
+        map.put("createTime", game.getCreateTime());
+        map.put("modifyTime", game.getModifyTime());
+        map.put("startedAt", game.getStartedAt());
+        map.put("finishedAt", game.getFinishedAt());
+        return map;
+    }
+
+    private void addPrisonerPlayer(Map<String, Map<String, Object>> rows, String openId, String name) {
+        if (StringUtils.isBlank(openId)) return;
+        if ("__prisoner_ai__".equals(openId)) return;
+        rows.computeIfAbsent(openId, key -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("openId", key);
+            row.put("name", StringUtils.defaultIfBlank(name, "玩家"));
+            row.put("playCount", 0);
+            row.put("winCount", 0);
+            row.put("score", 0);
             return row;
         });
     }

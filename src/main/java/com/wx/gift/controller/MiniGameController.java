@@ -4,6 +4,7 @@ import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.service.MiniGameService;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
+import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.WordDetectiveVo;
@@ -184,5 +185,55 @@ public class MiniGameController {
     @RequestMapping("/nim/leaderboard")
     public List<Map<String, Object>> nimLeaderboard(@RequestBody NimGameVo vo) {
         return miniGameService.nimLeaderboard(vo);
+    }
+
+    @RequestMapping("/prisoner/create")
+    public Map<String, Object> createPrisonerGame(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.createPrisonerGame(vo);
+    }
+
+    @RequestMapping("/prisoner/join")
+    public Map<String, Object> joinPrisonerGame(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.joinPrisonerGame(vo);
+    }
+
+    @RequestMapping("/prisoner/random")
+    public Map<String, Object> randomPrisonerGame(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.randomPrisonerGame(vo);
+    }
+
+    @RequestMapping("/prisoner/cancelMatch")
+    public Boolean cancelPrisonerMatch(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.cancelPrisonerMatch(vo);
+    }
+
+    @RequestMapping("/prisoner/detail")
+    public Map<String, Object> prisonerGameDetail(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.prisonerGameDetail(vo);
+    }
+
+    @RequestMapping("/prisoner/start")
+    public Map<String, Object> startPrisonerGame(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.startPrisonerGame(vo);
+    }
+
+    @RequestMapping("/prisoner/choose")
+    public Map<String, Object> prisonerChoose(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.prisonerChoose(vo);
+    }
+
+    @RequestMapping("/prisoner/restart")
+    public Map<String, Object> restartPrisonerGame(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.restartPrisonerGame(vo);
+    }
+
+    @RequestMapping("/prisoner/saveSolo")
+    public Map<String, Object> savePrisonerSoloGame(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.savePrisonerSoloGame(vo);
+    }
+
+    @RequestMapping("/prisoner/leaderboard")
+    public List<Map<String, Object>> prisonerLeaderboard(@RequestBody PrisonerGameVo vo) {
+        return miniGameService.prisonerLeaderboard(vo);
     }
 }
