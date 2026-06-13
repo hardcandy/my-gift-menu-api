@@ -7,6 +7,7 @@ import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
+import com.wx.gift.vo.TangramVo;
 import com.wx.gift.vo.WordDetectiveVo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -135,6 +136,16 @@ public class MiniGameController {
     @RequestMapping("/river/leaderboard")
     public List<Map<String, Object>> riverCrossingLeaderboard(@RequestBody RiverCrossingVo vo) {
         return miniGameService.riverCrossingLeaderboard(vo);
+    }
+
+    @RequestMapping("/tangram/saveRecord")
+    public Map<String, Object> saveTangramRecord(@RequestBody TangramVo vo) {
+        return miniGameService.saveTangramRecord(vo);
+    }
+
+    @RequestMapping("/tangram/leaderboard")
+    public List<Map<String, Object>> tangramLeaderboard(@RequestBody TangramVo vo) {
+        return miniGameService.tangramLeaderboard(vo);
     }
 
     @RequestMapping("/nim/create")

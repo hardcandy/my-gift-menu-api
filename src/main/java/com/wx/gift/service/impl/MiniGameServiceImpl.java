@@ -11,6 +11,7 @@ import com.wx.gift.mapper.NimGameMapper;
 import com.wx.gift.mapper.PrisonerGameMapper;
 import com.wx.gift.mapper.RiverCrossingRecordMapper;
 import com.wx.gift.mapper.SchulteRecordMapper;
+import com.wx.gift.mapper.TangramRecordMapper;
 import com.wx.gift.mapper.WordItemMapper;
 import com.wx.gift.mapper.WordPackMapper;
 import com.wx.gift.mapper.WordPlayRecordMapper;
@@ -24,6 +25,7 @@ import com.wx.gift.model.NimGame;
 import com.wx.gift.model.PrisonerGame;
 import com.wx.gift.model.RiverCrossingRecord;
 import com.wx.gift.model.SchulteRecord;
+import com.wx.gift.model.TangramRecord;
 import com.wx.gift.model.WordItem;
 import com.wx.gift.model.WordPack;
 import com.wx.gift.model.WordPlayRecord;
@@ -36,6 +38,7 @@ import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
+import com.wx.gift.vo.TangramVo;
 import com.wx.gift.vo.WordDetectiveVo;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
@@ -77,6 +80,8 @@ public class MiniGameServiceImpl implements MiniGameService {
     @Autowired
     private RiverCrossingRecordMapper riverCrossingRecordMapper;
     @Autowired
+    private TangramRecordMapper tangramRecordMapper;
+    @Autowired
     private WordPackMapper wordPackMapper;
     @Autowired
     private WordItemMapper wordItemMapper;
@@ -116,6 +121,13 @@ public class MiniGameServiceImpl implements MiniGameService {
         prisoner.put("recommendedAge", "7岁+");
         prisoner.put("difficulties", "10轮博弈，总分更高获胜");
         list.add(prisoner);
+        Map<String, Object> tangram = new LinkedHashMap<>();
+        tangram.put("key", "tangram");
+        tangram.put("name", "七巧拼图");
+        tangram.put("summary", "空间拼图 / 吸附闯关 / 比拼手速");
+        tangram.put("recommendedAge", "5岁+");
+        tangram.put("difficulties", "移动、旋转、翻转七块图形");
+        list.add(tangram);
         Map<String, Object> word = new LinkedHashMap<>();
         word.put("key", "wordDetective");
         word.put("name", "字词小侦探");
@@ -417,6 +429,48 @@ public class MiniGameServiceImpl implements MiniGameService {
                 .orderByAsc(RiverCrossingRecord::getFailCount);
         if (limit != null) wrapper.last("limit " + limit);
         return riverCrossingRecordMapper.selectList(wrapper).stream().map(this::riverRecordDto).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> saveTangramRecord(TangramVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getLevelId(), "levelId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        TangramRecord record = new TangramRecord();
+        record.setFamilyId(vo.getFamilyId());
+        record.setPlayerOpenId(vo.getOpenId());
+        record.setPlayerName(userName(vo.getOpenId()));
+        record.setLevelId(vo.getLevelId());
+        record.setLevelName(StringUtils.defaultIfBlank(vo.getLevelName(), "七巧拼图"));
+        record.setDurationMs(Math.max(0, vo.getDurationMs() == null ? 0 : vo.getDurationMs()));
+        record.setHintCount(Math.max(0, vo.getHintCount() == null ? 0 : vo.getHintCount()));
+        record.setMoveCount(Math.max(0, vo.getMoveCount() == null ? 0 : vo.getMoveCount()));
+        record.setStarCount(Math.max(1, Math.min(3, vo.getStarCount() == null ? 1 : vo.getStarCount())));
+        record.setStatus("active");
+        record.setCreateTime(now);
+        record.setModifyTime(now);
+        tangramRecordMapper.insert(record);
+        return tangramRecordDto(record);
+    }
+
+    @Override
+    public List<Map<String, Object>> tangramLeaderboard(TangramVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Integer limit = resolveLimit(vo.getLimit());
+        LambdaQueryWrapper<TangramRecord> wrapper = new LambdaQueryWrapper<TangramRecord>()
+                .eq(TangramRecord::getFamilyId, vo.getFamilyId())
+                .eq(TangramRecord::getStatus, "active");
+        if (StringUtils.isNotBlank(vo.getLevelId())) wrapper.eq(TangramRecord::getLevelId, vo.getLevelId());
+        wrapper.orderByAsc(TangramRecord::getDurationMs)
+                .orderByAsc(TangramRecord::getHintCount)
+                .orderByAsc(TangramRecord::getMoveCount);
+        if (limit != null) wrapper.last("limit " + limit);
+        return tangramRecordMapper.selectList(wrapper).stream().map(this::tangramRecordDto).collect(Collectors.toList());
     }
 
     @Override
@@ -1803,6 +1857,22 @@ public class MiniGameServiceImpl implements MiniGameService {
         map.put("failCount", record.getFailCount());
         map.put("hintCount", record.getHintCount());
         map.put("durationMs", record.getDurationMs());
+        map.put("starCount", record.getStarCount());
+        map.put("createTime", record.getCreateTime());
+        return map;
+    }
+
+    private Map<String, Object> tangramRecordDto(TangramRecord record) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", record.getId());
+        map.put("familyId", record.getFamilyId());
+        map.put("playerOpenId", record.getPlayerOpenId());
+        map.put("playerName", record.getPlayerName());
+        map.put("levelId", record.getLevelId());
+        map.put("levelName", record.getLevelName());
+        map.put("durationMs", record.getDurationMs());
+        map.put("hintCount", record.getHintCount());
+        map.put("moveCount", record.getMoveCount());
         map.put("starCount", record.getStarCount());
         map.put("createTime", record.getCreateTime());
         return map;

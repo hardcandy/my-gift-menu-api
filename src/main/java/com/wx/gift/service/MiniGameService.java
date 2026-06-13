@@ -6,6 +6,7 @@ import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
+import com.wx.gift.vo.TangramVo;
 import com.wx.gift.vo.WordDetectiveVo;
 
 import java.util.List;
@@ -35,6 +36,8 @@ public interface MiniGameService {
     List<Map<String, Object>> gomokuLeaderboard(GomokuGameVo vo);
     Map<String, Object> saveRiverCrossingRecord(RiverCrossingVo vo);
     List<Map<String, Object>> riverCrossingLeaderboard(RiverCrossingVo vo);
+    Map<String, Object> saveTangramRecord(TangramVo vo);
+    List<Map<String, Object>> tangramLeaderboard(TangramVo vo);
     Map<String, Object> createNimGame(NimGameVo vo);
     Map<String, Object> joinNimGame(NimGameVo vo);
     Map<String, Object> randomNimGame(NimGameVo vo);
