@@ -618,7 +618,9 @@ public class MiniGameServiceImpl implements MiniGameService {
         List<Map<String, Object>> players = blokusPlayers(game);
         Map<String, Object> me = blokusPlayer(players, vo.getOpenId());
         ValidatorUtil.checkNotNull(me, "你不在房间中");
-        me.put("ready", !Boolean.TRUE.equals(me.get("ready")));
+        ValidatorUtil.checkArgument(!vo.getOpenId().equals(game.getHostOpenId()), "房主不需要准备");
+        boolean ready = vo.getReady() == null ? !Boolean.TRUE.equals(me.get("ready")) : vo.getReady();
+        me.put("ready", ready);
         game.setPlayersText(GsonUtil.toJson(players));
         game.setModifyTime(new Date());
         blokusGameMapper.updateById(game);

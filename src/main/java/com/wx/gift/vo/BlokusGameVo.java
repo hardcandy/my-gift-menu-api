@@ -12,6 +12,7 @@ public class BlokusGameVo {
     private String roomCode;
     private Integer playerCount;
     private Integer turnTimeSeconds;
+    private Boolean ready;
     private String pieceId;
     private Integer x;
     private Integer y;
