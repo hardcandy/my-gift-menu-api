@@ -2,6 +2,7 @@ package com.wx.gift.service;
 
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.vo.BlocksVo;
+import com.wx.gift.vo.BlokusGameVo;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
@@ -42,6 +43,15 @@ public interface MiniGameService {
     List<Map<String, Object>> tangramLeaderboard(TangramVo vo);
     Map<String, Object> saveBlocksRecord(BlocksVo vo);
     List<Map<String, Object>> blocksLeaderboard(BlocksVo vo);
+    Map<String, Object> createBlokusGame(BlokusGameVo vo);
+    Map<String, Object> joinBlokusGame(BlokusGameVo vo);
+    Map<String, Object> blokusGameDetail(BlokusGameVo vo);
+    Map<String, Object> blokusReady(BlokusGameVo vo);
+    Map<String, Object> startBlokusGame(BlokusGameVo vo);
+    Map<String, Object> blokusPlace(BlokusGameVo vo);
+    Map<String, Object> blokusPass(BlokusGameVo vo);
+    Boolean leaveBlokusGame(BlokusGameVo vo);
+    List<Map<String, Object>> blokusLeaderboard(BlokusGameVo vo);
     Map<String, Object> createNimGame(NimGameVo vo);
     Map<String, Object> joinNimGame(NimGameVo vo);
     Map<String, Object> randomNimGame(NimGameVo vo);

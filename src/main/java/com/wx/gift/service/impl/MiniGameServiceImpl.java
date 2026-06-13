@@ -3,6 +3,7 @@ package com.wx.gift.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.mapper.BaseUserMapper;
+import com.wx.gift.mapper.BlokusGameMapper;
 import com.wx.gift.mapper.BlocksRecordMapper;
 import com.wx.gift.mapper.ChildMapper;
 import com.wx.gift.mapper.FamilyMapper;
@@ -19,6 +20,7 @@ import com.wx.gift.mapper.WordPackMapper;
 import com.wx.gift.mapper.WordPlayRecordMapper;
 import com.wx.gift.mapper.WordProgressMapper;
 import com.wx.gift.model.BaseUser;
+import com.wx.gift.model.BlokusGame;
 import com.wx.gift.model.BlocksRecord;
 import com.wx.gift.model.Child;
 import com.wx.gift.model.Family;
@@ -38,6 +40,7 @@ import com.wx.gift.service.MiniGameService;
 import com.wx.gift.util.GsonUtil;
 import com.wx.gift.util.ValidatorUtil;
 import com.wx.gift.vo.BlocksVo;
+import com.wx.gift.vo.BlokusGameVo;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
@@ -90,6 +93,8 @@ public class MiniGameServiceImpl implements MiniGameService {
     @Autowired
     private BlocksRecordMapper blocksRecordMapper;
     @Autowired
+    private BlokusGameMapper blokusGameMapper;
+    @Autowired
     private WerewolfGameMapper werewolfGameMapper;
     @Autowired
     private WordPackMapper wordPackMapper;
@@ -138,6 +143,13 @@ public class MiniGameServiceImpl implements MiniGameService {
         blocks.put("recommendedAge", "6岁+");
         blocks.put("difficulties", "移动、旋转、软降、硬降");
         list.add(blocks);
+        Map<String, Object> blokus = new LinkedHashMap<>();
+        blokus.put("key", "blokus");
+        blokus.put("name", "角斗士");
+        blokus.put("summary", "拼块占地 / 顶角相连 / 回合策略");
+        blokus.put("recommendedAge", "7岁+");
+        blokus.put("difficulties", "2-4人好友房，服务端规则校验");
+        list.add(blokus);
         Map<String, Object> werewolf = new LinkedHashMap<>();
         werewolf.put("key", "werewolf");
         werewolf.put("name", "狼人杀");
@@ -530,6 +542,225 @@ public class MiniGameServiceImpl implements MiniGameService {
                 .orderByAsc(BlocksRecord::getDurationMs);
         if (limit != null) wrapper.last("limit " + limit);
         return blocksRecordMapper.selectList(wrapper).stream().map(this::blocksRecordDto).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> createBlokusGame(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        int playerCount = Math.max(2, Math.min(4, vo.getPlayerCount() == null ? 4 : vo.getPlayerCount()));
+        BlokusGame game = new BlokusGame();
+        game.setFamilyId(vo.getFamilyId());
+        game.setRoomCode(generateBlokusRoomCode());
+        game.setHostOpenId(vo.getOpenId());
+        game.setHostName(userName(vo.getOpenId()));
+        game.setPlayerCount(playerCount);
+        game.setBoardSize(playerCount == 2 ? 16 : 20);
+        game.setPlayersText(GsonUtil.toJson(newBlokusPlayers(vo.getOpenId())));
+        game.setBoardText("[]");
+        game.setRemainingText(GsonUtil.toJson(newBlokusRemaining()));
+        game.setScoresText("{}");
+        game.setCurrentSeat(1);
+        game.setTurnNo(0);
+        game.setConsecutivePasses(0);
+        game.setStatus("WAITING");
+        game.setResultText("");
+        game.setCreateTime(now);
+        game.setModifyTime(now);
+        blokusGameMapper.insert(game);
+        return blokusDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> joinBlokusGame(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getRoomCode(), "请输入房间号");
+        BlokusGame game = requireBlokusGame(vo);
+        ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "游戏已开始，无法加入");
+        List<Map<String, Object>> players = blokusPlayers(game);
+        if (players.stream().anyMatch(player -> vo.getOpenId().equals(player.get("openId")))) return blokusDto(game, vo.getOpenId());
+        ValidatorUtil.checkArgument(players.size() < game.getPlayerCount(), "房间已满");
+        Map<String, Object> player = new LinkedHashMap<>();
+        int seat = players.size() + 1;
+        player.put("openId", vo.getOpenId());
+        player.put("name", userName(vo.getOpenId()));
+        player.put("seat", seat);
+        player.put("color", blokusColor(seat));
+        player.put("ready", false);
+        players.add(player);
+        game.setPlayersText(GsonUtil.toJson(players));
+        game.setModifyTime(new Date());
+        blokusGameMapper.updateById(game);
+        return blokusDto(game, vo.getOpenId());
+    }
+
+    @Override
+    public Map<String, Object> blokusGameDetail(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        BlokusGame game = requireBlokusGame(vo);
+        requireBlokusPlayer(game, vo.getOpenId());
+        return blokusDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> blokusReady(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        BlokusGame game = requireBlokusGame(vo);
+        ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "当前不能准备");
+        List<Map<String, Object>> players = blokusPlayers(game);
+        Map<String, Object> me = blokusPlayer(players, vo.getOpenId());
+        ValidatorUtil.checkNotNull(me, "你不在房间中");
+        me.put("ready", !Boolean.TRUE.equals(me.get("ready")));
+        game.setPlayersText(GsonUtil.toJson(players));
+        game.setModifyTime(new Date());
+        blokusGameMapper.updateById(game);
+        return blokusDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> startBlokusGame(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        BlokusGame game = requireBlokusGame(vo);
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以开始");
+        ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "当前不能开始");
+        List<Map<String, Object>> players = blokusPlayers(game);
+        ValidatorUtil.checkArgument(players.size() == game.getPlayerCount(), "需要 " + game.getPlayerCount() + " 位玩家才能开始");
+        ValidatorUtil.checkArgument(players.stream().allMatch(player -> vo.getOpenId().equals(player.get("openId")) || Boolean.TRUE.equals(player.get("ready"))), "请等待其他玩家准备");
+        Date now = new Date();
+        game.setStatus("PLAYING");
+        game.setStartedAt(now);
+        game.setModifyTime(now);
+        blokusGameMapper.updateById(game);
+        return blokusDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> blokusPlace(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getPieceId(), "请选择拼块");
+        BlokusGame game = requireBlokusGame(vo);
+        requireBlokusPlayer(game, vo.getOpenId());
+        ValidatorUtil.checkArgument("PLAYING".equals(game.getStatus()), "游戏未开始");
+        List<Map<String, Object>> players = blokusPlayers(game);
+        Map<String, Object> me = blokusPlayer(players, vo.getOpenId());
+        int seat = toInt(me.get("seat"));
+        ValidatorUtil.checkArgument(Objects.equals(seat, game.getCurrentSeat()), "还没轮到你");
+        List<Map<String, Object>> cells = jsonList(vo.getCellsText());
+        List<int[]> placeCells = normalizeBlokusCells(cells, vo.getX(), vo.getY());
+        validateBlokusPiece(vo.getPieceId(), placeCells, vo.getX(), vo.getY());
+        Map<String, Object> remaining = blokusRemaining(game);
+        List<String> myRemaining = blokusRemainingList(remaining, seat);
+        ValidatorUtil.checkArgument(myRemaining.contains(vo.getPieceId()), "这个拼块已经用过");
+        List<Map<String, Object>> board = blokusBoard(game);
+        validateBlokusPlacement(game, board, seat, placeCells);
+        for (int[] cell : placeCells) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("x", cell[0]);
+            row.put("y", cell[1]);
+            row.put("seat", seat);
+            board.add(row);
+        }
+        myRemaining.remove(vo.getPieceId());
+        remaining.put(String.valueOf(seat), myRemaining);
+        game.setBoardText(GsonUtil.toJson(board));
+        game.setRemainingText(GsonUtil.toJson(remaining));
+        game.setScoresText(GsonUtil.toJson(blokusScores(board)));
+        game.setConsecutivePasses(0);
+        game.setTurnNo((game.getTurnNo() == null ? 0 : game.getTurnNo()) + 1);
+        game.setCurrentSeat(nextBlokusSeat(players, seat));
+        game.setModifyTime(new Date());
+        blokusGameMapper.updateById(game);
+        return blokusDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> blokusPass(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        BlokusGame game = requireBlokusGame(vo);
+        requireBlokusPlayer(game, vo.getOpenId());
+        ValidatorUtil.checkArgument("PLAYING".equals(game.getStatus()), "游戏未开始");
+        List<Map<String, Object>> players = blokusPlayers(game);
+        Map<String, Object> me = blokusPlayer(players, vo.getOpenId());
+        int seat = toInt(me.get("seat"));
+        ValidatorUtil.checkArgument(Objects.equals(seat, game.getCurrentSeat()), "还没轮到你");
+        int passes = (game.getConsecutivePasses() == null ? 0 : game.getConsecutivePasses()) + 1;
+        game.setConsecutivePasses(passes);
+        game.setTurnNo((game.getTurnNo() == null ? 0 : game.getTurnNo()) + 1);
+        if (passes >= players.size()) finishBlokus(game);
+        else game.setCurrentSeat(nextBlokusSeat(players, seat));
+        game.setModifyTime(new Date());
+        blokusGameMapper.updateById(game);
+        return blokusDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean leaveBlokusGame(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        BlokusGame game = requireBlokusGame(vo);
+        requireBlokusPlayer(game, vo.getOpenId());
+        if (!"WAITING".equals(game.getStatus())) return true;
+        List<Map<String, Object>> players = blokusPlayers(game).stream()
+                .filter(player -> !vo.getOpenId().equals(player.get("openId")))
+                .collect(Collectors.toList());
+        if (players.isEmpty()) game.setStatus("CLOSED");
+        else if (vo.getOpenId().equals(game.getHostOpenId())) {
+            game.setHostOpenId(String.valueOf(players.get(0).get("openId")));
+            game.setHostName(String.valueOf(players.get(0).get("name")));
+        }
+        game.setPlayersText(GsonUtil.toJson(players));
+        game.setModifyTime(new Date());
+        blokusGameMapper.updateById(game);
+        return true;
+    }
+
+    @Override
+    public List<Map<String, Object>> blokusLeaderboard(BlokusGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        List<BlokusGame> games = blokusGameMapper.selectList(new LambdaQueryWrapper<BlokusGame>()
+                .eq(BlokusGame::getFamilyId, vo.getFamilyId())
+                .eq(BlokusGame::getStatus, "FINISHED")
+                .orderByDesc(BlokusGame::getFinishedAt));
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        for (BlokusGame game : games) {
+            Map<String, Object> scores = jsonMap(game.getScoresText());
+            List<Map<String, Object>> players = blokusPlayers(game);
+            int maxScore = players.stream().mapToInt(player -> configInt(scores, String.valueOf(player.get("seat")))).max().orElse(0);
+            for (Map<String, Object> player : players) {
+                String openId = String.valueOf(player.get("openId"));
+                Map<String, Object> row = rows.computeIfAbsent(openId, k -> {
+                    Map<String, Object> v = new LinkedHashMap<>();
+                    v.put("openId", openId);
+                    v.put("name", player.get("name"));
+                    v.put("playCount", 0);
+                    v.put("winCount", 0);
+                    v.put("score", 0);
+                    return v;
+                });
+                int score = configInt(scores, String.valueOf(player.get("seat")));
+                addInt(row, "playCount", 1);
+                addInt(row, "score", score);
+                if (score == maxScore) addInt(row, "winCount", 1);
+            }
+        }
+        return rows.values().stream()
+                .sorted((a, b) -> {
+                    int win = ((Integer) b.get("winCount")).compareTo((Integer) a.get("winCount"));
+                    if (win != 0) return win;
+                    return ((Integer) b.get("score")).compareTo((Integer) a.get("score"));
+                })
+                .limit(resolveLimit(vo.getLimit()) == null ? 20 : resolveLimit(vo.getLimit()))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -1897,6 +2128,277 @@ public class MiniGameServiceImpl implements MiniGameService {
             if (count == null || count == 0) return code;
         }
         return String.valueOf(System.currentTimeMillis()).substring(7, 13);
+    }
+
+    private String generateBlokusRoomCode() {
+        for (int i = 0; i < 20; i++) {
+            String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
+            Long count = blokusGameMapper.selectCount(new LambdaQueryWrapper<BlokusGame>()
+                    .eq(BlokusGame::getRoomCode, code)
+                    .in(BlokusGame::getStatus, "WAITING", "PLAYING")
+                    .last("limit 1"));
+            if (count == null || count == 0) return code;
+        }
+        return String.valueOf(System.currentTimeMillis()).substring(7, 13);
+    }
+
+    private BlokusGame requireBlokusGame(BlokusGameVo vo) {
+        BlokusGame game = null;
+        if (vo.getGameId() != null) game = blokusGameMapper.selectById(vo.getGameId());
+        else if (StringUtils.isNotBlank(vo.getRoomCode())) {
+            game = blokusGameMapper.selectOne(new LambdaQueryWrapper<BlokusGame>()
+                    .eq(BlokusGame::getRoomCode, StringUtils.trim(vo.getRoomCode()))
+                    .ne(BlokusGame::getStatus, "CLOSED")
+                    .orderByDesc(BlokusGame::getId)
+                    .last("limit 1"));
+        }
+        ValidatorUtil.checkNotNull(game, "房间不存在，请检查房间号");
+        return game;
+    }
+
+    private List<Map<String, Object>> newBlokusPlayers(String openId) {
+        Map<String, Object> host = new LinkedHashMap<>();
+        host.put("openId", openId);
+        host.put("name", userName(openId));
+        host.put("seat", 1);
+        host.put("color", blokusColor(1));
+        host.put("ready", true);
+        List<Map<String, Object>> players = new ArrayList<>();
+        players.add(host);
+        return players;
+    }
+
+    private String blokusColor(int seat) {
+        if (seat == 1) return "red";
+        if (seat == 2) return "blue";
+        if (seat == 3) return "yellow";
+        return "green";
+    }
+
+    private List<Map<String, Object>> blokusPlayers(BlokusGame game) {
+        return jsonList(game.getPlayersText());
+    }
+
+    private Map<String, Object> blokusPlayer(List<Map<String, Object>> players, String openId) {
+        return players.stream().filter(player -> openId.equals(player.get("openId"))).findFirst().orElse(null);
+    }
+
+    private void requireBlokusPlayer(BlokusGame game, String openId) {
+        ValidatorUtil.checkArgument(blokusPlayer(blokusPlayers(game), openId) != null, "你不在这个房间中");
+    }
+
+    private List<Map<String, Object>> blokusBoard(BlokusGame game) {
+        return jsonList(game.getBoardText());
+    }
+
+    private Map<String, Object> blokusRemaining(BlokusGame game) {
+        return jsonMap(game.getRemainingText());
+    }
+
+    private Map<String, Object> newBlokusRemaining() {
+        Map<String, Object> map = new LinkedHashMap<>();
+        List<String> ids = new ArrayList<>(blokusPieces().keySet());
+        for (int seat = 1; seat <= 4; seat++) map.put(String.valueOf(seat), new ArrayList<>(ids));
+        return map;
+    }
+
+    private List<String> blokusRemainingList(Map<String, Object> remaining, int seat) {
+        Object value = remaining.get(String.valueOf(seat));
+        if (value instanceof List) return (List<String>) ((List) value).stream().map(String::valueOf).collect(Collectors.toList());
+        return new ArrayList<>();
+    }
+
+    private Map<String, Object> blokusScores(List<Map<String, Object>> board) {
+        Map<String, Object> scores = new LinkedHashMap<>();
+        for (Map<String, Object> cell : board) {
+            String seat = String.valueOf(toInt(cell.get("seat")));
+            scores.put(seat, configInt(scores, seat) + 1);
+        }
+        return scores;
+    }
+
+    private int nextBlokusSeat(List<Map<String, Object>> players, int currentSeat) {
+        List<Integer> seats = players.stream().map(player -> toInt(player.get("seat"))).sorted().collect(Collectors.toList());
+        for (Integer seat : seats) if (seat > currentSeat) return seat;
+        return seats.isEmpty() ? 1 : seats.get(0);
+    }
+
+    private void finishBlokus(BlokusGame game) {
+        game.setStatus("FINISHED");
+        game.setFinishedAt(new Date());
+        Map<String, Object> scores = blokusScores(blokusBoard(game));
+        game.setScoresText(GsonUtil.toJson(scores));
+        List<Map<String, Object>> ranking = blokusPlayers(game).stream()
+                .sorted((a, b) -> Integer.compare(configInt(scores, String.valueOf(b.get("seat"))), configInt(scores, String.valueOf(a.get("seat")))))
+                .collect(Collectors.toList());
+        List<String> rows = new ArrayList<>();
+        for (int i = 0; i < ranking.size(); i++) {
+            Map<String, Object> player = ranking.get(i);
+            rows.add("第" + (i + 1) + "名：" + player.get("name") + " " + configInt(scores, String.valueOf(player.get("seat"))) + "格");
+        }
+        game.setResultText(String.join("\n", rows));
+    }
+
+    private Map<String, Object> blokusDto(BlokusGame game, String openId) {
+        List<Map<String, Object>> players = blokusPlayers(game);
+        Map<String, Object> me = blokusPlayer(players, openId);
+        Map<String, Object> scores = jsonMap(game.getScoresText());
+        if (scores.isEmpty()) scores = blokusScores(blokusBoard(game));
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", game.getId());
+        map.put("familyId", game.getFamilyId());
+        map.put("roomCode", game.getRoomCode());
+        map.put("hostOpenId", game.getHostOpenId());
+        map.put("playerCount", game.getPlayerCount());
+        map.put("boardSize", game.getBoardSize());
+        map.put("players", players);
+        map.put("board", blokusBoard(game));
+        map.put("remaining", blokusRemaining(game));
+        map.put("scores", scores);
+        map.put("currentSeat", game.getCurrentSeat());
+        map.put("turnNo", game.getTurnNo());
+        map.put("status", game.getStatus());
+        map.put("resultText", game.getResultText());
+        map.put("isHost", openId.equals(game.getHostOpenId()));
+        map.put("mySeat", me == null ? 0 : toInt(me.get("seat")));
+        map.put("myTurn", me != null && Objects.equals(toInt(me.get("seat")), game.getCurrentSeat()) && "PLAYING".equals(game.getStatus()));
+        map.put("pieces", blokusPieceDtos());
+        return map;
+    }
+
+    private void validateBlokusPiece(String pieceId, List<int[]> placeCells, Integer x, Integer y) {
+        List<int[]> base = blokusPieces().get(pieceId);
+        ValidatorUtil.checkNotNull(base, "拼块不存在");
+        List<int[]> normalized = placeCells.stream().map(cell -> new int[]{cell[0] - (x == null ? 0 : x), cell[1] - (y == null ? 0 : y)}).collect(Collectors.toList());
+        String key = cellsKey(normalized);
+        boolean matched = allTransforms(base).stream().anyMatch(shape -> cellsKey(shape).equals(key));
+        ValidatorUtil.checkArgument(matched, "拼块形状不正确");
+    }
+
+    private List<int[]> normalizeBlokusCells(List<Map<String, Object>> cells, Integer x, Integer y) {
+        ValidatorUtil.checkArgument(!cells.isEmpty(), "拼块不能为空");
+        List<int[]> list = new ArrayList<>();
+        int offsetX = x == null ? 0 : x;
+        int offsetY = y == null ? 0 : y;
+        for (Map<String, Object> cell : cells) {
+            list.add(new int[]{offsetX + toInt(cell.get("x")), offsetY + toInt(cell.get("y"))});
+        }
+        return list;
+    }
+
+    private void validateBlokusPlacement(BlokusGame game, List<Map<String, Object>> board, int seat, List<int[]> cells) {
+        int size = game.getBoardSize();
+        Map<String, Integer> occupied = new HashMap<>();
+        for (Map<String, Object> cell : board) occupied.put(toInt(cell.get("x")) + "," + toInt(cell.get("y")), toInt(cell.get("seat")));
+        boolean hasOwn = board.stream().anyMatch(cell -> Objects.equals(toInt(cell.get("seat")), seat));
+        boolean coversStart = false;
+        boolean cornerTouch = false;
+        for (int[] cell : cells) {
+            int x = cell[0], y = cell[1];
+            ValidatorUtil.checkArgument(x >= 0 && x < size && y >= 0 && y < size, "拼块超出棋盘了");
+            ValidatorUtil.checkArgument(!occupied.containsKey(x + "," + y), "这里已经有拼块了");
+            if (isBlokusStart(game, seat, x, y)) coversStart = true;
+            int[][] sides = {{1,0},{-1,0},{0,1},{0,-1}};
+            for (int[] d : sides) {
+                Integer s = occupied.get((x + d[0]) + "," + (y + d[1]));
+                ValidatorUtil.checkArgument(s == null || s != seat, "自己的拼块不能边贴边");
+            }
+            int[][] corners = {{1,1},{1,-1},{-1,1},{-1,-1}};
+            for (int[] d : corners) {
+                Integer s = occupied.get((x + d[0]) + "," + (y + d[1]));
+                if (s != null && s == seat) cornerTouch = true;
+            }
+        }
+        if (!hasOwn) ValidatorUtil.checkArgument(coversStart, "第一块必须放在自己的起始角");
+        else ValidatorUtil.checkArgument(cornerTouch, "新拼块必须和自己的拼块角相连");
+    }
+
+    private boolean isBlokusStart(BlokusGame game, int seat, int x, int y) {
+        int max = game.getBoardSize() - 1;
+        if (seat == 1) return x == 0 && y == 0;
+        if (game.getPlayerCount() != null && game.getPlayerCount() == 2 && seat == 2) return x == max && y == max;
+        if (seat == 2) return x == max && y == 0;
+        if (seat == 3) return x == 0 && y == max;
+        return x == max && y == max;
+    }
+
+    private List<Map<String, Object>> blokusPieceDtos() {
+        return blokusPieces().entrySet().stream().map(entry -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", entry.getKey());
+            row.put("name", entry.getKey());
+            row.put("cells", entry.getValue().stream().map(cell -> {
+                Map<String, Object> c = new LinkedHashMap<>();
+                c.put("x", cell[0]);
+                c.put("y", cell[1]);
+                return c;
+            }).collect(Collectors.toList()));
+            row.put("size", entry.getValue().size());
+            return row;
+        }).collect(Collectors.toList());
+    }
+
+    private Map<String, List<int[]>> blokusPieces() {
+        Map<String, List<int[]>> p = new LinkedHashMap<>();
+        p.put("P1", pts(0,0));
+        p.put("P2", pts(0,0,1,0));
+        p.put("P3I", pts(0,0,1,0,2,0));
+        p.put("P3L", pts(0,0,0,1,1,1));
+        p.put("P4I", pts(0,0,1,0,2,0,3,0));
+        p.put("P4O", pts(0,0,1,0,0,1,1,1));
+        p.put("P4T", pts(0,0,1,0,2,0,1,1));
+        p.put("P4L", pts(0,0,0,1,0,2,1,2));
+        p.put("P4Z", pts(0,0,1,0,1,1,2,1));
+        p.put("P5I", pts(0,0,1,0,2,0,3,0,4,0));
+        p.put("P5L", pts(0,0,0,1,0,2,0,3,1,3));
+        p.put("P5T", pts(0,0,1,0,2,0,1,1,1,2));
+        p.put("P5V", pts(0,0,0,1,0,2,1,2,2,2));
+        p.put("P5W", pts(0,0,0,1,1,1,1,2,2,2));
+        p.put("P5X", pts(1,0,0,1,1,1,2,1,1,2));
+        p.put("P5Z", pts(0,0,1,0,1,1,2,1,3,1));
+        p.put("P5U", pts(0,0,2,0,0,1,1,1,2,1));
+        p.put("P5P", pts(0,0,1,0,0,1,1,1,0,2));
+        p.put("P5N", pts(0,0,0,1,1,1,1,2,1,3));
+        p.put("P5Y", pts(0,0,1,0,2,0,3,0,1,1));
+        p.put("P5F", pts(1,0,0,1,1,1,1,2,2,2));
+        return p;
+    }
+
+    private List<int[]> pts(int... values) {
+        List<int[]> list = new ArrayList<>();
+        for (int i = 0; i + 1 < values.length; i += 2) list.add(new int[]{values[i], values[i + 1]});
+        return list;
+    }
+
+    private List<List<int[]>> allTransforms(List<int[]> cells) {
+        List<List<int[]>> result = new ArrayList<>();
+        for (int flip = 0; flip < 2; flip++) {
+            for (int rot = 0; rot < 4; rot++) {
+                List<int[]> shape = new ArrayList<>();
+                for (int[] cell : cells) {
+                    int x = flip == 1 ? -cell[0] : cell[0];
+                    int y = cell[1];
+                    for (int r = 0; r < rot; r++) {
+                        int nx = y;
+                        y = -x;
+                        x = nx;
+                    }
+                    shape.add(new int[]{x, y});
+                }
+                result.add(normalizeShape(shape));
+            }
+        }
+        return result;
+    }
+
+    private List<int[]> normalizeShape(List<int[]> cells) {
+        int minX = cells.stream().mapToInt(cell -> cell[0]).min().orElse(0);
+        int minY = cells.stream().mapToInt(cell -> cell[1]).min().orElse(0);
+        return cells.stream().map(cell -> new int[]{cell[0] - minX, cell[1] - minY}).collect(Collectors.toList());
+    }
+
+    private String cellsKey(List<int[]> cells) {
+        return cells.stream().map(cell -> cell[0] + ":" + cell[1]).sorted().collect(Collectors.joining("|"));
     }
 
     private WerewolfGame requireWerewolfGame(WerewolfGameVo vo) {

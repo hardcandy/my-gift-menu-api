@@ -3,6 +3,7 @@ package com.wx.gift.controller;
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.service.MiniGameService;
 import com.wx.gift.vo.BlocksVo;
+import com.wx.gift.vo.BlokusGameVo;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
@@ -158,6 +159,51 @@ public class MiniGameController {
     @RequestMapping("/blocks/leaderboard")
     public List<Map<String, Object>> blocksLeaderboard(@RequestBody BlocksVo vo) {
         return miniGameService.blocksLeaderboard(vo);
+    }
+
+    @RequestMapping("/blokus/create")
+    public Map<String, Object> createBlokusGame(@RequestBody BlokusGameVo vo) {
+        return miniGameService.createBlokusGame(vo);
+    }
+
+    @RequestMapping("/blokus/join")
+    public Map<String, Object> joinBlokusGame(@RequestBody BlokusGameVo vo) {
+        return miniGameService.joinBlokusGame(vo);
+    }
+
+    @RequestMapping("/blokus/detail")
+    public Map<String, Object> blokusGameDetail(@RequestBody BlokusGameVo vo) {
+        return miniGameService.blokusGameDetail(vo);
+    }
+
+    @RequestMapping("/blokus/ready")
+    public Map<String, Object> blokusReady(@RequestBody BlokusGameVo vo) {
+        return miniGameService.blokusReady(vo);
+    }
+
+    @RequestMapping("/blokus/start")
+    public Map<String, Object> startBlokusGame(@RequestBody BlokusGameVo vo) {
+        return miniGameService.startBlokusGame(vo);
+    }
+
+    @RequestMapping("/blokus/place")
+    public Map<String, Object> blokusPlace(@RequestBody BlokusGameVo vo) {
+        return miniGameService.blokusPlace(vo);
+    }
+
+    @RequestMapping("/blokus/pass")
+    public Map<String, Object> blokusPass(@RequestBody BlokusGameVo vo) {
+        return miniGameService.blokusPass(vo);
+    }
+
+    @RequestMapping("/blokus/leave")
+    public Boolean leaveBlokusGame(@RequestBody BlokusGameVo vo) {
+        return miniGameService.leaveBlokusGame(vo);
+    }
+
+    @RequestMapping("/blokus/leaderboard")
+    public List<Map<String, Object>> blokusLeaderboard(@RequestBody BlokusGameVo vo) {
+        return miniGameService.blokusLeaderboard(vo);
     }
 
     @RequestMapping("/nim/create")
