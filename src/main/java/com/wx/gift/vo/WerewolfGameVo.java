@@ -13,5 +13,11 @@ public class WerewolfGameVo {
     private String actionType;
     private String targetOpenId;
     private String speechText;
+    private Integer playerCount;
+    private Integer wolfCount;
+    private Integer seerCount;
+    private Integer witchCount;
+    private Integer villagerCount;
+    private Integer botCount;
     private Integer limit;
 }

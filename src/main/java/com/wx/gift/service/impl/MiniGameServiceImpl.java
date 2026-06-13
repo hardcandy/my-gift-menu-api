@@ -141,9 +141,9 @@ public class MiniGameServiceImpl implements MiniGameService {
         Map<String, Object> werewolf = new LinkedHashMap<>();
         werewolf.put("key", "werewolf");
         werewolf.put("name", "狼人夜话");
-        werewolf.put("summary", "好友房 / 身份推理 / 白天投票");
+        werewolf.put("summary", "好友房 / 角色配置 / 机器人测试");
         werewolf.put("recommendedAge", "8岁+");
-        werewolf.put("difficulties", "6人新手局：2狼、预言家、女巫、2平民");
+        werewolf.put("difficulties", "4-12人可调：狼人、预言家、女巫、平民");
         list.add(werewolf);
         Map<String, Object> word = new LinkedHashMap<>();
         word.put("key", "wordDetective");
@@ -739,6 +739,9 @@ public class MiniGameServiceImpl implements MiniGameService {
         game.setRoomCode(generateWerewolfRoomCode());
         game.setHostOpenId(vo.getOpenId());
         game.setHostName(userName(vo.getOpenId()));
+        Map<String, Object> config = werewolfConfig(vo);
+        game.setPlayerCount((Integer) config.get("playerCount"));
+        game.setConfigText(GsonUtil.toJson(config));
         game.setPlayersText(GsonUtil.toJson(newWerewolfPlayers(vo.getOpenId())));
         game.setRolesText("{}");
         game.setAliveText("[]");
@@ -767,13 +770,40 @@ public class MiniGameServiceImpl implements MiniGameService {
         ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "游戏已开始，无法加入");
         List<Map<String, Object>> players = werewolfPlayers(game);
         if (players.stream().anyMatch(player -> vo.getOpenId().equals(player.get("openId")))) return werewolfDto(game, vo.getOpenId());
-        ValidatorUtil.checkArgument(players.size() < 6, "房间已满，无法加入");
+        ValidatorUtil.checkArgument(players.size() < werewolfPlayerCount(game), "房间已满，无法加入");
         Map<String, Object> player = new LinkedHashMap<>();
         player.put("openId", vo.getOpenId());
         player.put("name", userName(vo.getOpenId()));
         player.put("seat", players.size() + 1);
         player.put("ready", false);
         players.add(player);
+        reseatWerewolfPlayers(players);
+        game.setPlayersText(GsonUtil.toJson(players));
+        game.setModifyTime(new Date());
+        werewolfGameMapper.updateById(game);
+        return werewolfDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> addWerewolfBots(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        WerewolfGame game = requireWerewolfGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以添加机器人");
+        ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "游戏开始后不能添加机器人");
+        List<Map<String, Object>> players = werewolfPlayers(game);
+        int vacant = Math.max(0, werewolfPlayerCount(game) - players.size());
+        int addCount = Math.min(vacant, Math.max(1, vo.getBotCount() == null ? vacant : vo.getBotCount()));
+        for (int i = 0; i < addCount; i++) {
+            Map<String, Object> bot = new LinkedHashMap<>();
+            bot.put("openId", "__werewolf_bot_" + game.getId() + "_" + (players.size() + 1));
+            bot.put("name", "机器人" + (players.size() + 1));
+            bot.put("seat", players.size() + 1);
+            bot.put("ready", true);
+            bot.put("bot", true);
+            players.add(bot);
+        }
         reseatWerewolfPlayers(players);
         game.setPlayersText(GsonUtil.toJson(players));
         game.setModifyTime(new Date());
@@ -815,10 +845,11 @@ public class MiniGameServiceImpl implements MiniGameService {
         ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以开始");
         ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "当前不能开始");
         List<Map<String, Object>> players = werewolfPlayers(game);
-        ValidatorUtil.checkArgument(players.size() == 6, "需要 6 位玩家才能开始");
+        int playerCount = werewolfPlayerCount(game);
+        ValidatorUtil.checkArgument(players.size() == playerCount, "需要 " + playerCount + " 位玩家才能开始");
         ValidatorUtil.checkArgument(players.stream().allMatch(player -> vo.getOpenId().equals(player.get("openId")) || Boolean.TRUE.equals(player.get("ready"))), "请等待其他玩家准备");
         Date now = new Date();
-        game.setRolesText(GsonUtil.toJson(assignWerewolfRoles(players)));
+        game.setRolesText(GsonUtil.toJson(assignWerewolfRoles(players, werewolfConfig(game))));
         game.setAliveText(GsonUtil.toJson(players.stream().map(player -> player.get("openId")).collect(Collectors.toList())));
         game.setActionsText("{}");
         game.setSpeechText("[]");
@@ -905,6 +936,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         requireFamilyMember(game.getFamilyId(), vo.getOpenId());
         ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以推进");
         if (!"PLAYING".equals(game.getStatus())) return werewolfDto(game, vo.getOpenId());
+        fillWerewolfBotActions(game);
         if ("NIGHT_WOLF".equals(game.getPhase())) game.setPhase("NIGHT_SEER");
         else if ("NIGHT_SEER".equals(game.getPhase())) game.setPhase("NIGHT_WITCH");
         else if ("NIGHT_WITCH".equals(game.getPhase())) settleWerewolfNight(game);
@@ -1909,14 +1941,60 @@ public class MiniGameServiceImpl implements MiniGameService {
         for (int i = 0; i < players.size(); i++) players.get(i).put("seat", i + 1);
     }
 
-    private Map<String, Object> assignWerewolfRoles(List<Map<String, Object>> players) {
+    private Map<String, Object> werewolfConfig(WerewolfGameVo vo) {
+        int playerCount = clamp(vo.getPlayerCount(), 4, 12, 6);
+        int wolf = clamp(vo.getWolfCount(), 1, Math.max(1, playerCount - 1), Math.max(1, playerCount / 3));
+        int seer = clamp(vo.getSeerCount(), 0, 1, playerCount >= 5 ? 1 : 0);
+        int witch = clamp(vo.getWitchCount(), 0, 1, playerCount >= 6 ? 1 : 0);
+        int villager = vo.getVillagerCount() == null ? playerCount - wolf - seer - witch : vo.getVillagerCount();
+        villager = Math.max(0, villager);
+        ValidatorUtil.checkArgument(wolf + seer + witch + villager == playerCount, "身份数量之和必须等于玩家人数");
+        ValidatorUtil.checkArgument(wolf < playerCount, "狼人数量不能等于或超过总人数");
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("playerCount", playerCount);
+        config.put("wolfCount", wolf);
+        config.put("seerCount", seer);
+        config.put("witchCount", witch);
+        config.put("villagerCount", villager);
+        return config;
+    }
+
+    private Map<String, Object> werewolfConfig(WerewolfGame game) {
+        Map<String, Object> config = jsonMap(game.getConfigText());
+        if (config.isEmpty()) {
+            int playerCount = game.getPlayerCount() == null || game.getPlayerCount() <= 0 ? 6 : game.getPlayerCount();
+            config.put("playerCount", playerCount);
+            config.put("wolfCount", 2);
+            config.put("seerCount", 1);
+            config.put("witchCount", 1);
+            config.put("villagerCount", Math.max(0, playerCount - 4));
+        }
+        return config;
+    }
+
+    private int clamp(Integer value, int min, int max, int fallback) {
+        int v = value == null ? fallback : value;
+        return Math.max(min, Math.min(max, v));
+    }
+
+    private int configInt(Map<String, Object> config, String key) {
+        Integer value = toInt(config.get(key));
+        return value == null ? 0 : value;
+    }
+
+    private int werewolfPlayerCount(WerewolfGame game) {
+        if (game.getPlayerCount() != null && game.getPlayerCount() > 0) return game.getPlayerCount();
+        int count = configInt(werewolfConfig(game), "playerCount");
+        return count <= 0 ? 6 : count;
+    }
+
+    private Map<String, Object> assignWerewolfRoles(List<Map<String, Object>> players, Map<String, Object> config) {
         List<String> roles = new ArrayList<>();
-        roles.add("wolf");
-        roles.add("wolf");
-        roles.add("seer");
-        roles.add("witch");
-        roles.add("villager");
-        roles.add("villager");
+        for (int i = 0; i < configInt(config, "wolfCount"); i++) roles.add("wolf");
+        for (int i = 0; i < configInt(config, "seerCount"); i++) roles.add("seer");
+        for (int i = 0; i < configInt(config, "witchCount"); i++) roles.add("witch");
+        for (int i = 0; i < configInt(config, "villagerCount"); i++) roles.add("villager");
+        while (roles.size() < players.size()) roles.add("villager");
         java.util.Collections.shuffle(roles);
         Map<String, Object> map = new LinkedHashMap<>();
         for (int i = 0; i < players.size(); i++) map.put(String.valueOf(players.get(i).get("openId")), roles.get(i));
@@ -1941,6 +2019,68 @@ public class MiniGameServiceImpl implements MiniGameService {
 
     private Map<String, Object> werewolfVotes(WerewolfGame game) {
         return jsonMap(game.getVoteText());
+    }
+
+    private void fillWerewolfBotActions(WerewolfGame game) {
+        List<Map<String, Object>> players = werewolfPlayers(game);
+        Map<String, Object> roles = werewolfRoles(game);
+        List<String> alive = werewolfAlive(game);
+        Map<String, Object> actions = werewolfActions(game);
+        Map<String, Object> votes = werewolfVotes(game);
+        List<Map<String, Object>> speech = werewolfSpeech(game);
+        String phase = game.getPhase();
+        for (Map<String, Object> player : players) {
+            if (!Boolean.TRUE.equals(player.get("bot"))) continue;
+            String openId = String.valueOf(player.get("openId"));
+            if (!alive.contains(openId)) continue;
+            String role = String.valueOf(roles.get(openId));
+            if ("NIGHT_WOLF".equals(phase) && "wolf".equals(role)) {
+                putBotAction(actions, phase, openId, "wolfKill", randomAliveTarget(alive, roles, openId, false), "");
+            } else if ("NIGHT_SEER".equals(phase) && "seer".equals(role)) {
+                putBotAction(actions, phase, openId, "seerCheck", randomAliveTarget(alive, roles, openId, true), "");
+            } else if ("NIGHT_WITCH".equals(phase) && "witch".equals(role)) {
+                putBotAction(actions, phase, openId, "skip", "", "");
+            } else if ("DAY_SPEECH".equals(phase)) {
+                if (speech.stream().noneMatch(item -> openId.equals(item.get("openId")))) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("openId", openId);
+                    row.put("text", player.get("name") + "：我先观察一轮。");
+                    speech.add(row);
+                }
+            } else if ("DAY_VOTE".equals(phase)) {
+                if (!votes.containsKey(openId)) {
+                    Map<String, Object> vote = new LinkedHashMap<>();
+                    vote.put("openId", openId);
+                    vote.put("targetOpenId", randomAliveTarget(alive, roles, openId, true));
+                    vote.put("type", "vote");
+                    votes.put(openId, vote);
+                }
+            }
+        }
+        game.setActionsText(GsonUtil.toJson(actions));
+        game.setSpeechText(GsonUtil.toJson(speech));
+        game.setVoteText(GsonUtil.toJson(votes));
+    }
+
+    private void putBotAction(Map<String, Object> actions, String phase, String openId, String type, String target, String text) {
+        String key = phase + ":" + openId;
+        if (actions.containsKey(key)) return;
+        Map<String, Object> action = new LinkedHashMap<>();
+        action.put("openId", openId);
+        action.put("targetOpenId", StringUtils.defaultString(target));
+        action.put("type", type);
+        action.put("text", text);
+        actions.put(key, action);
+    }
+
+    private String randomAliveTarget(List<String> alive, Map<String, Object> roles, String self, boolean allowWolf) {
+        List<String> pool = alive.stream()
+                .filter(openId -> !openId.equals(self))
+                .filter(openId -> allowWolf || !"wolf".equals(roles.get(openId)))
+                .collect(Collectors.toList());
+        if (pool.isEmpty()) pool = alive.stream().filter(openId -> !openId.equals(self)).collect(Collectors.toList());
+        if (pool.isEmpty()) return "";
+        return pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
     }
 
     private void settleWerewolfNight(WerewolfGame game) {
@@ -2037,6 +2177,8 @@ public class MiniGameServiceImpl implements MiniGameService {
         map.put("hostOpenId", game.getHostOpenId());
         map.put("hostName", game.getHostName());
         map.put("players", players.stream().map(player -> werewolfPlayerDto(player, alive, roles, openId, myRole)).collect(Collectors.toList()));
+        map.put("playerCount", werewolfPlayerCount(game));
+        map.put("config", werewolfConfig(game));
         map.put("phase", game.getPhase());
         map.put("status", game.getStatus());
         map.put("dayNo", game.getDayNo());

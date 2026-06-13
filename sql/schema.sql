@@ -540,6 +540,8 @@ CREATE TABLE IF NOT EXISTS t_gift_werewolf_game (
   host_open_id VARCHAR(128) NOT NULL,
   host_name VARCHAR(128) NOT NULL,
   players_text TEXT,
+  player_count INT NOT NULL DEFAULT 6,
+  config_text TEXT,
   roles_text TEXT,
   alive_text TEXT,
   actions_text TEXT,

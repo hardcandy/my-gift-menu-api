@@ -64,6 +64,7 @@ public interface MiniGameService {
     List<Map<String, Object>> prisonerLeaderboard(PrisonerGameVo vo);
     Map<String, Object> createWerewolfGame(WerewolfGameVo vo);
     Map<String, Object> joinWerewolfGame(WerewolfGameVo vo);
+    Map<String, Object> addWerewolfBots(WerewolfGameVo vo);
     Map<String, Object> werewolfGameDetail(WerewolfGameVo vo);
     Map<String, Object> werewolfReady(WerewolfGameVo vo);
     Map<String, Object> startWerewolfGame(WerewolfGameVo vo);

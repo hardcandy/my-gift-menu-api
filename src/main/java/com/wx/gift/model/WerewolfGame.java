@@ -19,6 +19,8 @@ public class WerewolfGame {
     private String hostOpenId;
     private String hostName;
     private String playersText;
+    private Integer playerCount;
+    private String configText;
     private String rolesText;
     private String aliveText;
     private String actionsText;

@@ -270,6 +270,11 @@ public class MiniGameController {
         return miniGameService.joinWerewolfGame(vo);
     }
 
+    @RequestMapping("/werewolf/addBots")
+    public Map<String, Object> addWerewolfBots(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.addWerewolfBots(vo);
+    }
+
     @RequestMapping("/werewolf/detail")
     public Map<String, Object> werewolfGameDetail(@RequestBody WerewolfGameVo vo) {
         return miniGameService.werewolfGameDetail(vo);
