@@ -1913,6 +1913,16 @@ public class MiniGameServiceImpl implements MiniGameService {
                     .orderByDesc(WerewolfGame::getId)
                     .last("limit 1"));
         }
+        if (game == null && vo.getFamilyId() != null && StringUtils.isNotBlank(vo.getOpenId())) {
+            game = werewolfGameMapper.selectOne(new LambdaQueryWrapper<WerewolfGame>()
+                    .eq(WerewolfGame::getFamilyId, vo.getFamilyId())
+                    .in(WerewolfGame::getStatus, "WAITING", "PLAYING")
+                    .and(wrapper -> wrapper.eq(WerewolfGame::getHostOpenId, vo.getOpenId())
+                            .or()
+                            .like(WerewolfGame::getPlayersText, vo.getOpenId()))
+                    .orderByDesc(WerewolfGame::getModifyTime)
+                    .last("limit 1"));
+        }
         ValidatorUtil.checkNotNull(game, "房间不存在，请检查房间号");
         if (vo.getFamilyId() != null) ValidatorUtil.checkArgument(Objects.equals(game.getFamilyId(), vo.getFamilyId()), "房间不在当前圈子");
         return game;
