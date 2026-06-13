@@ -13,6 +13,8 @@ public class NimGameVo {
     private Integer takeCount;
     private Integer limit;
     private String winnerType;
+    private Integer initialStones;
+    private Integer maxTake;
     private Integer totalRounds;
     private String moveHistory;
 }

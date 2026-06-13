@@ -100,7 +100,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         Map<String, Object> nim = new LinkedHashMap<>();
         nim.put("key", "nim");
         nim.put("name", "取石子大作战");
-        nim.put("summary", "单机练习 / 联网双人 / 随机匹配");
+        nim.put("summary", "闯关模式 / 联网双人 / 随机匹配");
         nim.put("recommendedAge", "6岁+");
         nim.put("difficulties", "21颗石子，拿最后一颗获胜");
         list.add(nim);
@@ -555,6 +555,10 @@ public class MiniGameServiceImpl implements MiniGameService {
         String computerOpenId = "__nim_computer__";
         boolean computerWin = "computer".equalsIgnoreCase(StringUtils.defaultString(vo.getWinnerType()));
         NimGame game = newNimGame(vo.getFamilyId(), vo.getOpenId(), "SINGLE", "FINISHED");
+        int initialStones = vo.getInitialStones() == null ? 21 : Math.max(1, vo.getInitialStones());
+        int maxTake = vo.getMaxTake() == null ? 3 : Math.max(1, vo.getMaxTake());
+        game.setInitialStones(initialStones);
+        game.setMaxTake(maxTake);
         game.setGuestOpenId(computerOpenId);
         game.setGuestName("电脑");
         game.setCurrentTurnOpenId("");
