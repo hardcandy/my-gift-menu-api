@@ -133,7 +133,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         list.add(prisoner);
         Map<String, Object> blocks = new LinkedHashMap<>();
         blocks.put("key", "blocks");
-        blocks.put("name", "方块下落挑战");
+        blocks.put("name", "俄罗斯方块");
         blocks.put("summary", "经典下落 / 消行得分 / 比拼手速");
         blocks.put("recommendedAge", "6岁+");
         blocks.put("difficulties", "移动、旋转、软降、硬降");
