@@ -13,6 +13,7 @@ import com.wx.gift.mapper.PrisonerGameMapper;
 import com.wx.gift.mapper.RiverCrossingRecordMapper;
 import com.wx.gift.mapper.SchulteRecordMapper;
 import com.wx.gift.mapper.TangramRecordMapper;
+import com.wx.gift.mapper.WerewolfGameMapper;
 import com.wx.gift.mapper.WordItemMapper;
 import com.wx.gift.mapper.WordPackMapper;
 import com.wx.gift.mapper.WordPlayRecordMapper;
@@ -28,6 +29,7 @@ import com.wx.gift.model.PrisonerGame;
 import com.wx.gift.model.RiverCrossingRecord;
 import com.wx.gift.model.SchulteRecord;
 import com.wx.gift.model.TangramRecord;
+import com.wx.gift.model.WerewolfGame;
 import com.wx.gift.model.WordItem;
 import com.wx.gift.model.WordPack;
 import com.wx.gift.model.WordPlayRecord;
@@ -42,6 +44,7 @@ import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.TangramVo;
+import com.wx.gift.vo.WerewolfGameVo;
 import com.wx.gift.vo.WordDetectiveVo;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
@@ -86,6 +89,8 @@ public class MiniGameServiceImpl implements MiniGameService {
     private TangramRecordMapper tangramRecordMapper;
     @Autowired
     private BlocksRecordMapper blocksRecordMapper;
+    @Autowired
+    private WerewolfGameMapper werewolfGameMapper;
     @Autowired
     private WordPackMapper wordPackMapper;
     @Autowired
@@ -133,6 +138,13 @@ public class MiniGameServiceImpl implements MiniGameService {
         blocks.put("recommendedAge", "6岁+");
         blocks.put("difficulties", "移动、旋转、软降、硬降");
         list.add(blocks);
+        Map<String, Object> werewolf = new LinkedHashMap<>();
+        werewolf.put("key", "werewolf");
+        werewolf.put("name", "狼人夜话");
+        werewolf.put("summary", "好友房 / 身份推理 / 白天投票");
+        werewolf.put("recommendedAge", "8岁+");
+        werewolf.put("difficulties", "6人新手局：2狼、预言家、女巫、2平民");
+        list.add(werewolf);
         Map<String, Object> word = new LinkedHashMap<>();
         word.put("key", "wordDetective");
         word.put("name", "字词小侦探");
@@ -713,6 +725,220 @@ public class MiniGameServiceImpl implements MiniGameService {
                 })
                 .limit(resolveLimit(vo.getLimit()) == null ? 20 : resolveLimit(vo.getLimit()))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> createWerewolfGame(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        WerewolfGame game = new WerewolfGame();
+        game.setFamilyId(vo.getFamilyId());
+        game.setRoomCode(generateWerewolfRoomCode());
+        game.setHostOpenId(vo.getOpenId());
+        game.setHostName(userName(vo.getOpenId()));
+        game.setPlayersText(GsonUtil.toJson(newWerewolfPlayers(vo.getOpenId())));
+        game.setRolesText("{}");
+        game.setAliveText("[]");
+        game.setActionsText("{}");
+        game.setSpeechText("[]");
+        game.setVoteText("{}");
+        game.setNightResultText("{}");
+        game.setDayNo(0);
+        game.setPhase("WAITING");
+        game.setWinnerCamp("");
+        game.setResultText("");
+        game.setStatus("WAITING");
+        game.setCreateTime(now);
+        game.setModifyTime(now);
+        werewolfGameMapper.insert(game);
+        return werewolfDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> joinWerewolfGame(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotBlank(vo.getRoomCode(), "请输入房间号");
+        WerewolfGame game = requireWerewolfGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "游戏已开始，无法加入");
+        List<Map<String, Object>> players = werewolfPlayers(game);
+        if (players.stream().anyMatch(player -> vo.getOpenId().equals(player.get("openId")))) return werewolfDto(game, vo.getOpenId());
+        ValidatorUtil.checkArgument(players.size() < 6, "房间已满，无法加入");
+        Map<String, Object> player = new LinkedHashMap<>();
+        player.put("openId", vo.getOpenId());
+        player.put("name", userName(vo.getOpenId()));
+        player.put("seat", players.size() + 1);
+        player.put("ready", false);
+        players.add(player);
+        reseatWerewolfPlayers(players);
+        game.setPlayersText(GsonUtil.toJson(players));
+        game.setModifyTime(new Date());
+        werewolfGameMapper.updateById(game);
+        return werewolfDto(game, vo.getOpenId());
+    }
+
+    @Override
+    public Map<String, Object> werewolfGameDetail(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        WerewolfGame game = requireWerewolfGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        return werewolfDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> werewolfReady(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        WerewolfGame game = requireWerewolfGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "当前不能准备");
+        List<Map<String, Object>> players = werewolfPlayers(game);
+        Map<String, Object> me = werewolfPlayer(players, vo.getOpenId());
+        ValidatorUtil.checkNotNull(me, "你不在房间中");
+        me.put("ready", !Boolean.TRUE.equals(me.get("ready")));
+        game.setPlayersText(GsonUtil.toJson(players));
+        game.setModifyTime(new Date());
+        werewolfGameMapper.updateById(game);
+        return werewolfDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> startWerewolfGame(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        WerewolfGame game = requireWerewolfGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以开始");
+        ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "当前不能开始");
+        List<Map<String, Object>> players = werewolfPlayers(game);
+        ValidatorUtil.checkArgument(players.size() == 6, "需要 6 位玩家才能开始");
+        ValidatorUtil.checkArgument(players.stream().allMatch(player -> vo.getOpenId().equals(player.get("openId")) || Boolean.TRUE.equals(player.get("ready"))), "请等待其他玩家准备");
+        Date now = new Date();
+        game.setRolesText(GsonUtil.toJson(assignWerewolfRoles(players)));
+        game.setAliveText(GsonUtil.toJson(players.stream().map(player -> player.get("openId")).collect(Collectors.toList())));
+        game.setActionsText("{}");
+        game.setSpeechText("[]");
+        game.setVoteText("{}");
+        game.setNightResultText("{}");
+        game.setDayNo(1);
+        game.setPhase("NIGHT_WOLF");
+        game.setStatus("PLAYING");
+        game.setStartedAt(now);
+        game.setModifyTime(now);
+        werewolfGameMapper.updateById(game);
+        return werewolfDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> werewolfAction(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        WerewolfGame game = requireWerewolfGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument("PLAYING".equals(game.getStatus()), "游戏未开始");
+        ValidatorUtil.checkArgument(werewolfAlive(game).contains(vo.getOpenId()), "你已经出局");
+        Map<String, Object> actions = werewolfActions(game);
+        Map<String, Object> roles = werewolfRoles(game);
+        String role = String.valueOf(roles.get(vo.getOpenId()));
+        String phase = game.getPhase();
+        List<String> alive = werewolfAlive(game);
+        Map<String, Object> action = new LinkedHashMap<>();
+        action.put("openId", vo.getOpenId());
+        action.put("targetOpenId", StringUtils.defaultString(vo.getTargetOpenId()));
+        action.put("text", StringUtils.defaultString(vo.getSpeechText()));
+        if ("NIGHT_WOLF".equals(phase)) {
+            ValidatorUtil.checkArgument("wolf".equals(role), "等待狼人行动");
+            ValidatorUtil.checkNotBlank(vo.getTargetOpenId(), "请选择目标");
+            ValidatorUtil.checkArgument(alive.contains(vo.getTargetOpenId()), "目标已出局");
+            ValidatorUtil.checkArgument(!vo.getOpenId().equals(vo.getTargetOpenId()), "不能选择自己");
+            action.put("type", "wolfKill");
+        } else if ("NIGHT_SEER".equals(phase)) {
+            ValidatorUtil.checkArgument("seer".equals(role), "等待预言家行动");
+            ValidatorUtil.checkNotBlank(vo.getTargetOpenId(), "请选择查验目标");
+            ValidatorUtil.checkArgument(alive.contains(vo.getTargetOpenId()), "目标已出局");
+            action.put("type", "seerCheck");
+        } else if ("NIGHT_WITCH".equals(phase)) {
+            ValidatorUtil.checkArgument("witch".equals(role), "等待女巫行动");
+            String actionType = StringUtils.defaultIfBlank(vo.getActionType(), "skip");
+            ValidatorUtil.checkArgument("save".equals(actionType) || "poison".equals(actionType) || "skip".equals(actionType), "女巫行动不正确");
+            if ("poison".equals(actionType)) {
+                ValidatorUtil.checkNotBlank(vo.getTargetOpenId(), "请选择毒药目标");
+                ValidatorUtil.checkArgument(alive.contains(vo.getTargetOpenId()), "目标已出局");
+            }
+            action.put("type", actionType);
+        } else if ("DAY_SPEECH".equals(phase)) {
+            List<Map<String, Object>> speech = werewolfSpeech(game);
+            speech.add(action);
+            game.setSpeechText(GsonUtil.toJson(speech));
+            game.setModifyTime(new Date());
+            werewolfGameMapper.updateById(game);
+            return werewolfDto(game, vo.getOpenId());
+        } else if ("DAY_VOTE".equals(phase)) {
+            ValidatorUtil.checkNotBlank(vo.getTargetOpenId(), "请选择投票目标");
+            ValidatorUtil.checkArgument(alive.contains(vo.getTargetOpenId()), "目标已出局");
+            action.put("type", "vote");
+            Map<String, Object> votes = werewolfVotes(game);
+            votes.put(vo.getOpenId(), action);
+            game.setVoteText(GsonUtil.toJson(votes));
+            game.setModifyTime(new Date());
+            werewolfGameMapper.updateById(game);
+            return werewolfDto(game, vo.getOpenId());
+        } else {
+            ValidatorUtil.checkArgument(false, "当前阶段不能行动");
+        }
+        actions.put(phase + ":" + vo.getOpenId(), action);
+        game.setActionsText(GsonUtil.toJson(actions));
+        game.setModifyTime(new Date());
+        werewolfGameMapper.updateById(game);
+        return werewolfDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> werewolfNextPhase(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        WerewolfGame game = requireWerewolfGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以推进");
+        if (!"PLAYING".equals(game.getStatus())) return werewolfDto(game, vo.getOpenId());
+        if ("NIGHT_WOLF".equals(game.getPhase())) game.setPhase("NIGHT_SEER");
+        else if ("NIGHT_SEER".equals(game.getPhase())) game.setPhase("NIGHT_WITCH");
+        else if ("NIGHT_WITCH".equals(game.getPhase())) settleWerewolfNight(game);
+        else if ("DAY_SPEECH".equals(game.getPhase())) game.setPhase("DAY_VOTE");
+        else if ("DAY_VOTE".equals(game.getPhase())) settleWerewolfVote(game);
+        game.setModifyTime(new Date());
+        werewolfGameMapper.updateById(game);
+        return werewolfDto(game, vo.getOpenId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean leaveWerewolfGame(WerewolfGameVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        WerewolfGame game = requireWerewolfGame(vo);
+        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        if (!"WAITING".equals(game.getStatus())) return true;
+        List<Map<String, Object>> players = werewolfPlayers(game).stream()
+                .filter(player -> !vo.getOpenId().equals(player.get("openId")))
+                .collect(Collectors.toList());
+        if (players.isEmpty()) {
+            game.setStatus("CLOSED");
+            game.setPhase("CLOSED");
+        } else {
+            reseatWerewolfPlayers(players);
+            if (vo.getOpenId().equals(game.getHostOpenId())) {
+                game.setHostOpenId(String.valueOf(players.get(0).get("openId")));
+                game.setHostName(String.valueOf(players.get(0).get("name")));
+            }
+            game.setPlayersText(GsonUtil.toJson(players));
+        }
+        game.setModifyTime(new Date());
+        werewolfGameMapper.updateById(game);
+        return true;
     }
 
     @Override
@@ -1630,6 +1856,265 @@ public class MiniGameServiceImpl implements MiniGameService {
             if (count == null || count == 0) return code;
         }
         return String.valueOf(System.currentTimeMillis()).substring(7, 13);
+    }
+
+    private String generateWerewolfRoomCode() {
+        for (int i = 0; i < 20; i++) {
+            String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
+            Long count = werewolfGameMapper.selectCount(new LambdaQueryWrapper<WerewolfGame>()
+                    .eq(WerewolfGame::getRoomCode, code)
+                    .in(WerewolfGame::getStatus, "WAITING", "PLAYING")
+                    .last("limit 1"));
+            if (count == null || count == 0) return code;
+        }
+        return String.valueOf(System.currentTimeMillis()).substring(7, 13);
+    }
+
+    private WerewolfGame requireWerewolfGame(WerewolfGameVo vo) {
+        WerewolfGame game = null;
+        if (vo.getGameId() != null) {
+            game = werewolfGameMapper.selectById(vo.getGameId());
+        } else if (StringUtils.isNotBlank(vo.getRoomCode())) {
+            game = werewolfGameMapper.selectOne(new LambdaQueryWrapper<WerewolfGame>()
+                    .eq(WerewolfGame::getRoomCode, StringUtils.trim(vo.getRoomCode()))
+                    .ne(WerewolfGame::getStatus, "CLOSED")
+                    .orderByDesc(WerewolfGame::getId)
+                    .last("limit 1"));
+        }
+        ValidatorUtil.checkNotNull(game, "房间不存在，请检查房间号");
+        if (vo.getFamilyId() != null) ValidatorUtil.checkArgument(Objects.equals(game.getFamilyId(), vo.getFamilyId()), "房间不在当前圈子");
+        return game;
+    }
+
+    private List<Map<String, Object>> newWerewolfPlayers(String openId) {
+        Map<String, Object> host = new LinkedHashMap<>();
+        host.put("openId", openId);
+        host.put("name", userName(openId));
+        host.put("seat", 1);
+        host.put("ready", true);
+        List<Map<String, Object>> players = new ArrayList<>();
+        players.add(host);
+        return players;
+    }
+
+    private List<Map<String, Object>> werewolfPlayers(WerewolfGame game) {
+        return jsonList(game.getPlayersText());
+    }
+
+    private Map<String, Object> werewolfPlayer(List<Map<String, Object>> players, String openId) {
+        return players.stream().filter(player -> openId.equals(player.get("openId"))).findFirst().orElse(null);
+    }
+
+    private void reseatWerewolfPlayers(List<Map<String, Object>> players) {
+        for (int i = 0; i < players.size(); i++) players.get(i).put("seat", i + 1);
+    }
+
+    private Map<String, Object> assignWerewolfRoles(List<Map<String, Object>> players) {
+        List<String> roles = new ArrayList<>();
+        roles.add("wolf");
+        roles.add("wolf");
+        roles.add("seer");
+        roles.add("witch");
+        roles.add("villager");
+        roles.add("villager");
+        java.util.Collections.shuffle(roles);
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < players.size(); i++) map.put(String.valueOf(players.get(i).get("openId")), roles.get(i));
+        return map;
+    }
+
+    private List<String> werewolfAlive(WerewolfGame game) {
+        return jsonStringList(game.getAliveText());
+    }
+
+    private Map<String, Object> werewolfRoles(WerewolfGame game) {
+        return jsonMap(game.getRolesText());
+    }
+
+    private Map<String, Object> werewolfActions(WerewolfGame game) {
+        return jsonMap(game.getActionsText());
+    }
+
+    private List<Map<String, Object>> werewolfSpeech(WerewolfGame game) {
+        return jsonList(game.getSpeechText());
+    }
+
+    private Map<String, Object> werewolfVotes(WerewolfGame game) {
+        return jsonMap(game.getVoteText());
+    }
+
+    private void settleWerewolfNight(WerewolfGame game) {
+        List<String> alive = werewolfAlive(game);
+        Map<String, Object> actions = werewolfActions(game);
+        Map<String, Object> roles = werewolfRoles(game);
+        String wolfTarget = mostVotedTarget(actions, "NIGHT_WOLF:");
+        String witchType = "";
+        String witchTarget = "";
+        for (Map.Entry<String, Object> entry : actions.entrySet()) {
+            if (!entry.getKey().startsWith("NIGHT_WITCH:")) continue;
+            Map<String, Object> action = asMap(entry.getValue());
+            witchType = String.valueOf(action.get("type"));
+            witchTarget = String.valueOf(action.get("targetOpenId"));
+        }
+        List<String> dead = new ArrayList<>();
+        boolean saved = "save".equals(witchType);
+        if (StringUtils.isNotBlank(wolfTarget) && !saved) dead.add(wolfTarget);
+        if ("poison".equals(witchType) && StringUtils.isNotBlank(witchTarget)) dead.add(witchTarget);
+        List<String> uniqueDead = dead.stream().filter(StringUtils::isNotBlank).distinct().collect(Collectors.toList());
+        alive = alive.stream().filter(openId -> !uniqueDead.contains(openId)).collect(Collectors.toList());
+        Map<String, Object> night = new LinkedHashMap<>();
+        night.put("dayNo", game.getDayNo());
+        night.put("wolfTarget", StringUtils.defaultString(wolfTarget));
+        night.put("saved", saved);
+        night.put("poisonTarget", "poison".equals(witchType) ? witchTarget : "");
+        night.put("dead", uniqueDead);
+        game.setAliveText(GsonUtil.toJson(alive));
+        game.setNightResultText(GsonUtil.toJson(night));
+        String winner = werewolfWinnerCamp(alive, roles);
+        if (StringUtils.isNotBlank(winner)) finishWerewolf(game, winner);
+        else {
+            game.setPhase("DAY_SPEECH");
+            game.setSpeechText("[]");
+            game.setVoteText("{}");
+        }
+    }
+
+    private void settleWerewolfVote(WerewolfGame game) {
+        List<String> alive = werewolfAlive(game);
+        Map<String, Object> roles = werewolfRoles(game);
+        String target = mostVotedTarget(werewolfVotes(game), "");
+        if (StringUtils.isNotBlank(target)) alive = alive.stream().filter(openId -> !target.equals(openId)).collect(Collectors.toList());
+        game.setAliveText(GsonUtil.toJson(alive));
+        String winner = werewolfWinnerCamp(alive, roles);
+        if (StringUtils.isNotBlank(winner)) finishWerewolf(game, winner);
+        else {
+            game.setDayNo((game.getDayNo() == null ? 1 : game.getDayNo()) + 1);
+            game.setPhase("NIGHT_WOLF");
+            game.setActionsText("{}");
+            game.setVoteText("{}");
+            game.setSpeechText("[]");
+            game.setNightResultText("{}");
+        }
+    }
+
+    private String mostVotedTarget(Map<String, Object> actions, String keyPrefix) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : actions.entrySet()) {
+            if (StringUtils.isNotBlank(keyPrefix) && !entry.getKey().startsWith(keyPrefix)) continue;
+            Map<String, Object> action = asMap(entry.getValue());
+            String target = StringUtils.defaultString((String) action.get("targetOpenId"));
+            if (StringUtils.isBlank(target)) continue;
+            counts.put(target, counts.getOrDefault(target, 0) + 1);
+        }
+        return counts.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("");
+    }
+
+    private String werewolfWinnerCamp(List<String> alive, Map<String, Object> roles) {
+        long wolves = alive.stream().filter(openId -> "wolf".equals(roles.get(openId))).count();
+        long good = alive.size() - wolves;
+        if (wolves <= 0) return "good";
+        if (wolves >= good) return "wolf";
+        return "";
+    }
+
+    private void finishWerewolf(WerewolfGame game, String winnerCamp) {
+        game.setStatus("FINISHED");
+        game.setPhase("FINISHED");
+        game.setWinnerCamp(winnerCamp);
+        game.setResultText("wolf".equals(winnerCamp) ? "狼人阵营胜利" : "好人阵营胜利");
+        game.setFinishedAt(new Date());
+    }
+
+    private Map<String, Object> werewolfDto(WerewolfGame game, String openId) {
+        List<Map<String, Object>> players = werewolfPlayers(game);
+        Map<String, Object> roles = werewolfRoles(game);
+        List<String> alive = werewolfAlive(game);
+        String myRole = StringUtils.defaultString((String) roles.get(openId));
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", game.getId());
+        map.put("familyId", game.getFamilyId());
+        map.put("roomCode", game.getRoomCode());
+        map.put("hostOpenId", game.getHostOpenId());
+        map.put("hostName", game.getHostName());
+        map.put("players", players.stream().map(player -> werewolfPlayerDto(player, alive, roles, openId, myRole)).collect(Collectors.toList()));
+        map.put("phase", game.getPhase());
+        map.put("status", game.getStatus());
+        map.put("dayNo", game.getDayNo());
+        map.put("myRole", myRole);
+        map.put("myRoleText", werewolfRoleText(myRole));
+        map.put("myCamp", "wolf".equals(myRole) ? "狼人阵营" : "好人阵营");
+        map.put("isHost", openId.equals(game.getHostOpenId()));
+        map.put("alive", alive);
+        map.put("nightResult", jsonMap(game.getNightResultText()));
+        map.put("speech", werewolfSpeech(game));
+        map.put("actions", safeWerewolfActions(game, openId, myRole));
+        map.put("votes", werewolfVotes(game));
+        map.put("winnerCamp", game.getWinnerCamp());
+        map.put("resultText", game.getResultText());
+        map.put("createTime", game.getCreateTime());
+        return map;
+    }
+
+    private Map<String, Object> werewolfPlayerDto(Map<String, Object> player, List<String> alive, Map<String, Object> roles, String openId, String myRole) {
+        Map<String, Object> row = new LinkedHashMap<>(player);
+        String playerOpenId = String.valueOf(player.get("openId"));
+        row.put("alive", alive.isEmpty() || alive.contains(playerOpenId));
+        boolean reveal = playerOpenId.equals(openId) || ("wolf".equals(myRole) && "wolf".equals(roles.get(playerOpenId)));
+        row.put("role", reveal ? roles.get(playerOpenId) : "");
+        row.put("roleText", reveal ? werewolfRoleText(String.valueOf(roles.get(playerOpenId))) : "");
+        return row;
+    }
+
+    private Map<String, Object> safeWerewolfActions(WerewolfGame game, String openId, String myRole) {
+        Map<String, Object> actions = werewolfActions(game);
+        if ("wolf".equals(myRole)) return actions;
+        Map<String, Object> own = new LinkedHashMap<>();
+        if ("witch".equals(myRole) && "NIGHT_WITCH".equals(game.getPhase())) {
+            own.put("wolfTarget", mostVotedTarget(actions, "NIGHT_WOLF:"));
+        }
+        actions.forEach((key, value) -> {
+            if (key.endsWith(":" + openId)) own.put(key, value);
+        });
+        return own;
+    }
+
+    private String werewolfRoleText(String role) {
+        if ("wolf".equals(role)) return "狼人";
+        if ("seer".equals(role)) return "预言家";
+        if ("witch".equals(role)) return "女巫";
+        if ("villager".equals(role)) return "平民";
+        return "";
+    }
+
+    private List<Map<String, Object>> jsonList(String json) {
+        try {
+            List list = GsonUtil.fromJson(StringUtils.defaultIfBlank(json, "[]"), List.class);
+            return (List<Map<String, Object>>) list;
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private List<String> jsonStringList(String json) {
+        try {
+            List list = GsonUtil.fromJson(StringUtils.defaultIfBlank(json, "[]"), List.class);
+            return (List<String>) list;
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private Map<String, Object> jsonMap(String json) {
+        try {
+            Map map = GsonUtil.fromJson(StringUtils.defaultIfBlank(json, "{}"), Map.class);
+            return map == null ? new LinkedHashMap<>() : (Map<String, Object>) map;
+        } catch (Exception e) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private Map<String, Object> asMap(Object value) {
+        return value instanceof Map ? (Map<String, Object>) value : new LinkedHashMap<>();
     }
 
     private void closeMyMatchingPrisoner(Integer familyId, String openId) {

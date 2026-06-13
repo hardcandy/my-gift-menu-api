@@ -8,6 +8,7 @@ import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.TangramVo;
+import com.wx.gift.vo.WerewolfGameVo;
 import com.wx.gift.vo.WordDetectiveVo;
 
 import java.util.List;
@@ -61,4 +62,12 @@ public interface MiniGameService {
     Map<String, Object> restartPrisonerGame(PrisonerGameVo vo);
     Map<String, Object> savePrisonerSoloGame(PrisonerGameVo vo);
     List<Map<String, Object>> prisonerLeaderboard(PrisonerGameVo vo);
+    Map<String, Object> createWerewolfGame(WerewolfGameVo vo);
+    Map<String, Object> joinWerewolfGame(WerewolfGameVo vo);
+    Map<String, Object> werewolfGameDetail(WerewolfGameVo vo);
+    Map<String, Object> werewolfReady(WerewolfGameVo vo);
+    Map<String, Object> startWerewolfGame(WerewolfGameVo vo);
+    Map<String, Object> werewolfAction(WerewolfGameVo vo);
+    Map<String, Object> werewolfNextPhase(WerewolfGameVo vo);
+    Boolean leaveWerewolfGame(WerewolfGameVo vo);
 }

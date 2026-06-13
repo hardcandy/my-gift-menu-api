@@ -9,6 +9,7 @@ import com.wx.gift.vo.PrisonerGameVo;
 import com.wx.gift.vo.RiverCrossingVo;
 import com.wx.gift.vo.SchulteRecordVo;
 import com.wx.gift.vo.TangramVo;
+import com.wx.gift.vo.WerewolfGameVo;
 import com.wx.gift.vo.WordDetectiveVo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -257,5 +258,45 @@ public class MiniGameController {
     @RequestMapping("/prisoner/leaderboard")
     public List<Map<String, Object>> prisonerLeaderboard(@RequestBody PrisonerGameVo vo) {
         return miniGameService.prisonerLeaderboard(vo);
+    }
+
+    @RequestMapping("/werewolf/create")
+    public Map<String, Object> createWerewolfGame(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.createWerewolfGame(vo);
+    }
+
+    @RequestMapping("/werewolf/join")
+    public Map<String, Object> joinWerewolfGame(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.joinWerewolfGame(vo);
+    }
+
+    @RequestMapping("/werewolf/detail")
+    public Map<String, Object> werewolfGameDetail(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.werewolfGameDetail(vo);
+    }
+
+    @RequestMapping("/werewolf/ready")
+    public Map<String, Object> werewolfReady(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.werewolfReady(vo);
+    }
+
+    @RequestMapping("/werewolf/start")
+    public Map<String, Object> startWerewolfGame(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.startWerewolfGame(vo);
+    }
+
+    @RequestMapping("/werewolf/action")
+    public Map<String, Object> werewolfAction(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.werewolfAction(vo);
+    }
+
+    @RequestMapping("/werewolf/next")
+    public Map<String, Object> werewolfNextPhase(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.werewolfNextPhase(vo);
+    }
+
+    @RequestMapping("/werewolf/leave")
+    public Boolean leaveWerewolfGame(@RequestBody WerewolfGameVo vo) {
+        return miniGameService.leaveWerewolfGame(vo);
     }
 }

@@ -533,6 +533,33 @@ CREATE TABLE IF NOT EXISTS t_gift_blocks_record (
   INDEX idx_player_time (player_open_id, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS t_gift_werewolf_game (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  family_id INT NOT NULL,
+  room_code VARCHAR(16) NOT NULL,
+  host_open_id VARCHAR(128) NOT NULL,
+  host_name VARCHAR(128) NOT NULL,
+  players_text TEXT,
+  roles_text TEXT,
+  alive_text TEXT,
+  actions_text TEXT,
+  speech_text TEXT,
+  vote_text TEXT,
+  night_result_text TEXT,
+  day_no INT NOT NULL DEFAULT 0,
+  phase VARCHAR(32) NOT NULL DEFAULT 'WAITING',
+  winner_camp VARCHAR(32),
+  result_text VARCHAR(128),
+  status VARCHAR(32) NOT NULL DEFAULT 'WAITING',
+  started_at DATETIME,
+  finished_at DATETIME,
+  create_time DATETIME NOT NULL,
+  modify_time DATETIME NOT NULL,
+  INDEX idx_room_status (room_code, status),
+  INDEX idx_family_status_time (family_id, status, create_time),
+  INDEX idx_host_open_id (host_open_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS t_gift_word_pack (
   id INT PRIMARY KEY AUTO_INCREMENT,
   family_id INT NOT NULL,
