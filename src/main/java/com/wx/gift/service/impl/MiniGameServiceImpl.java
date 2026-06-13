@@ -565,6 +565,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         game.setScoresText("{}");
         game.setCurrentSeat(1);
         game.setTurnNo(0);
+        game.setTurnTimeSeconds(resolveBlokusTurnSeconds(vo.getTurnTimeSeconds()));
         game.setConsecutivePasses(0);
         game.setStatus("WAITING");
         game.setResultText("");
@@ -599,10 +600,12 @@ public class MiniGameServiceImpl implements MiniGameService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> blokusGameDetail(BlokusGameVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         BlokusGame game = requireBlokusGame(vo);
         requireBlokusPlayer(game, vo.getOpenId());
+        if (applyBlokusTimeout(game)) blokusGameMapper.updateById(game);
         return blokusDto(game, vo.getOpenId());
     }
 
@@ -635,6 +638,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         Date now = new Date();
         game.setStatus("PLAYING");
         game.setStartedAt(now);
+        game.setTurnStartedAt(now);
         game.setModifyTime(now);
         blokusGameMapper.updateById(game);
         return blokusDto(game, vo.getOpenId());
@@ -647,10 +651,18 @@ public class MiniGameServiceImpl implements MiniGameService {
         ValidatorUtil.checkNotBlank(vo.getPieceId(), "请选择拼块");
         BlokusGame game = requireBlokusGame(vo);
         requireBlokusPlayer(game, vo.getOpenId());
-        ValidatorUtil.checkArgument("PLAYING".equals(game.getStatus()), "游戏未开始");
+        boolean timedOut = applyBlokusTimeout(game);
+        if (!"PLAYING".equals(game.getStatus())) {
+            if (timedOut) blokusGameMapper.updateById(game);
+            return blokusDto(game, vo.getOpenId());
+        }
         List<Map<String, Object>> players = blokusPlayers(game);
         Map<String, Object> me = blokusPlayer(players, vo.getOpenId());
         int seat = toInt(me.get("seat"));
+        if (timedOut && !Objects.equals(seat, game.getCurrentSeat())) {
+            blokusGameMapper.updateById(game);
+            return blokusDto(game, vo.getOpenId());
+        }
         ValidatorUtil.checkArgument(Objects.equals(seat, game.getCurrentSeat()), "还没轮到你");
         List<Map<String, Object>> cells = jsonList(vo.getCellsText());
         List<int[]> placeCells = normalizeBlokusCells(cells, vo.getX(), vo.getY());
@@ -675,6 +687,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         game.setConsecutivePasses(0);
         game.setTurnNo((game.getTurnNo() == null ? 0 : game.getTurnNo()) + 1);
         game.setCurrentSeat(nextBlokusSeat(players, seat));
+        game.setTurnStartedAt(new Date());
         game.setModifyTime(new Date());
         blokusGameMapper.updateById(game);
         return blokusDto(game, vo.getOpenId());
@@ -686,16 +699,27 @@ public class MiniGameServiceImpl implements MiniGameService {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         BlokusGame game = requireBlokusGame(vo);
         requireBlokusPlayer(game, vo.getOpenId());
-        ValidatorUtil.checkArgument("PLAYING".equals(game.getStatus()), "游戏未开始");
+        boolean timedOut = applyBlokusTimeout(game);
+        if (!"PLAYING".equals(game.getStatus())) {
+            if (timedOut) blokusGameMapper.updateById(game);
+            return blokusDto(game, vo.getOpenId());
+        }
         List<Map<String, Object>> players = blokusPlayers(game);
         Map<String, Object> me = blokusPlayer(players, vo.getOpenId());
         int seat = toInt(me.get("seat"));
+        if (timedOut && !Objects.equals(seat, game.getCurrentSeat())) {
+            blokusGameMapper.updateById(game);
+            return blokusDto(game, vo.getOpenId());
+        }
         ValidatorUtil.checkArgument(Objects.equals(seat, game.getCurrentSeat()), "还没轮到你");
         int passes = (game.getConsecutivePasses() == null ? 0 : game.getConsecutivePasses()) + 1;
         game.setConsecutivePasses(passes);
         game.setTurnNo((game.getTurnNo() == null ? 0 : game.getTurnNo()) + 1);
         if (passes >= players.size()) finishBlokus(game);
-        else game.setCurrentSeat(nextBlokusSeat(players, seat));
+        else {
+            game.setCurrentSeat(nextBlokusSeat(players, seat));
+            game.setTurnStartedAt(new Date());
+        }
         game.setModifyTime(new Date());
         blokusGameMapper.updateById(game);
         return blokusDto(game, vo.getOpenId());
@@ -2142,6 +2166,38 @@ public class MiniGameServiceImpl implements MiniGameService {
         return String.valueOf(System.currentTimeMillis()).substring(7, 13);
     }
 
+    private int resolveBlokusTurnSeconds(Integer seconds) {
+        int value = seconds == null ? 60 : seconds;
+        if (value < 15) return 15;
+        if (value > 300) return 300;
+        return value;
+    }
+
+    private boolean applyBlokusTimeout(BlokusGame game) {
+        if (game == null || !"PLAYING".equals(game.getStatus())) return false;
+        int seconds = resolveBlokusTurnSeconds(game.getTurnTimeSeconds());
+        Date startedAt = game.getTurnStartedAt() == null ? game.getStartedAt() : game.getTurnStartedAt();
+        if (startedAt == null) {
+            game.setTurnStartedAt(new Date());
+            return true;
+        }
+        Date now = new Date();
+        long elapsedSeconds = Math.max(0, (now.getTime() - startedAt.getTime()) / 1000);
+        if (elapsedSeconds < seconds) return false;
+        List<Map<String, Object>> players = blokusPlayers(game);
+        int currentSeat = game.getCurrentSeat() == null ? 1 : game.getCurrentSeat();
+        int passes = (game.getConsecutivePasses() == null ? 0 : game.getConsecutivePasses()) + 1;
+        game.setConsecutivePasses(passes);
+        game.setTurnNo((game.getTurnNo() == null ? 0 : game.getTurnNo()) + 1);
+        if (passes >= players.size()) finishBlokus(game);
+        else {
+            game.setCurrentSeat(nextBlokusSeat(players, currentSeat));
+            game.setTurnStartedAt(now);
+        }
+        game.setModifyTime(now);
+        return true;
+    }
+
     private BlokusGame requireBlokusGame(BlokusGameVo vo) {
         BlokusGame game = null;
         if (vo.getGameId() != null) game = blokusGameMapper.selectById(vo.getGameId());
@@ -2257,6 +2313,9 @@ public class MiniGameServiceImpl implements MiniGameService {
         map.put("scores", scores);
         map.put("currentSeat", game.getCurrentSeat());
         map.put("turnNo", game.getTurnNo());
+        map.put("turnTimeSeconds", resolveBlokusTurnSeconds(game.getTurnTimeSeconds()));
+        map.put("turnStartedAtMs", game.getTurnStartedAt() == null ? 0L : game.getTurnStartedAt().getTime());
+        map.put("turnRemainingSeconds", blokusRemainingSeconds(game));
         map.put("status", game.getStatus());
         map.put("resultText", game.getResultText());
         map.put("isHost", openId.equals(game.getHostOpenId()));
@@ -2264,6 +2323,14 @@ public class MiniGameServiceImpl implements MiniGameService {
         map.put("myTurn", me != null && Objects.equals(toInt(me.get("seat")), game.getCurrentSeat()) && "PLAYING".equals(game.getStatus()));
         map.put("pieces", blokusPieceDtos());
         return map;
+    }
+
+    private int blokusRemainingSeconds(BlokusGame game) {
+        if (game == null || !"PLAYING".equals(game.getStatus())) return 0;
+        Date startedAt = game.getTurnStartedAt() == null ? game.getStartedAt() : game.getTurnStartedAt();
+        if (startedAt == null) return resolveBlokusTurnSeconds(game.getTurnTimeSeconds());
+        long elapsedSeconds = Math.max(0, (new Date().getTime() - startedAt.getTime()) / 1000);
+        return Math.max(0, resolveBlokusTurnSeconds(game.getTurnTimeSeconds()) - (int) elapsedSeconds);
     }
 
     private void validateBlokusPiece(String pieceId, List<int[]> placeCells, Integer x, Integer y) {

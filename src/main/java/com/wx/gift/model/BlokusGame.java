@@ -26,10 +26,12 @@ public class BlokusGame {
     private String scoresText;
     private Integer currentSeat;
     private Integer turnNo;
+    private Integer turnTimeSeconds;
     private Integer consecutivePasses;
     private String status;
     private String resultText;
     private Date startedAt;
+    private Date turnStartedAt;
     private Date finishedAt;
     private Date createTime;
     private Date modifyTime;

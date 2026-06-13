@@ -11,6 +11,7 @@ public class BlokusGameVo {
     private Integer gameId;
     private String roomCode;
     private Integer playerCount;
+    private Integer turnTimeSeconds;
     private String pieceId;
     private Integer x;
     private Integer y;
