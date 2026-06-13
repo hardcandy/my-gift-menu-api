@@ -140,7 +140,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         list.add(blocks);
         Map<String, Object> werewolf = new LinkedHashMap<>();
         werewolf.put("key", "werewolf");
-        werewolf.put("name", "狼人夜话");
+        werewolf.put("name", "狼人杀");
         werewolf.put("summary", "好友房 / 角色配置 / 机器人测试");
         werewolf.put("recommendedAge", "8岁+");
         werewolf.put("difficulties", "4-12人可调：狼人、预言家、女巫、平民");
@@ -766,7 +766,6 @@ public class MiniGameServiceImpl implements MiniGameService {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         ValidatorUtil.checkNotBlank(vo.getRoomCode(), "请输入房间号");
         WerewolfGame game = requireWerewolfGame(vo);
-        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
         ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "游戏已开始，无法加入");
         List<Map<String, Object>> players = werewolfPlayers(game);
         if (players.stream().anyMatch(player -> vo.getOpenId().equals(player.get("openId")))) return werewolfDto(game, vo.getOpenId());
@@ -789,7 +788,6 @@ public class MiniGameServiceImpl implements MiniGameService {
     public Map<String, Object> addWerewolfBots(WerewolfGameVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         WerewolfGame game = requireWerewolfGame(vo);
-        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
         ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以添加机器人");
         ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "游戏开始后不能添加机器人");
         List<Map<String, Object>> players = werewolfPlayers(game);
@@ -815,7 +813,7 @@ public class MiniGameServiceImpl implements MiniGameService {
     public Map<String, Object> werewolfGameDetail(WerewolfGameVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         WerewolfGame game = requireWerewolfGame(vo);
-        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        requireWerewolfPlayer(game, vo.getOpenId());
         return werewolfDto(game, vo.getOpenId());
     }
 
@@ -824,7 +822,6 @@ public class MiniGameServiceImpl implements MiniGameService {
     public Map<String, Object> werewolfReady(WerewolfGameVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         WerewolfGame game = requireWerewolfGame(vo);
-        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
         ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "当前不能准备");
         List<Map<String, Object>> players = werewolfPlayers(game);
         Map<String, Object> me = werewolfPlayer(players, vo.getOpenId());
@@ -841,7 +838,6 @@ public class MiniGameServiceImpl implements MiniGameService {
     public Map<String, Object> startWerewolfGame(WerewolfGameVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         WerewolfGame game = requireWerewolfGame(vo);
-        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
         ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以开始");
         ValidatorUtil.checkArgument("WAITING".equals(game.getStatus()), "当前不能开始");
         List<Map<String, Object>> players = werewolfPlayers(game);
@@ -869,7 +865,7 @@ public class MiniGameServiceImpl implements MiniGameService {
     public Map<String, Object> werewolfAction(WerewolfGameVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         WerewolfGame game = requireWerewolfGame(vo);
-        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        requireWerewolfPlayer(game, vo.getOpenId());
         ValidatorUtil.checkArgument("PLAYING".equals(game.getStatus()), "游戏未开始");
         ValidatorUtil.checkArgument(werewolfAlive(game).contains(vo.getOpenId()), "你已经出局");
         Map<String, Object> actions = werewolfActions(game);
@@ -935,7 +931,6 @@ public class MiniGameServiceImpl implements MiniGameService {
     public Map<String, Object> werewolfNextPhase(WerewolfGameVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         WerewolfGame game = requireWerewolfGame(vo);
-        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
         ValidatorUtil.checkArgument(vo.getOpenId().equals(game.getHostOpenId()), "只有房主可以推进");
         if (!"PLAYING".equals(game.getStatus())) return werewolfDto(game, vo.getOpenId());
         fillWerewolfBotActions(game);
@@ -954,7 +949,7 @@ public class MiniGameServiceImpl implements MiniGameService {
     public Boolean leaveWerewolfGame(WerewolfGameVo vo) {
         ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
         WerewolfGame game = requireWerewolfGame(vo);
-        requireFamilyMember(game.getFamilyId(), vo.getOpenId());
+        requireWerewolfPlayer(game, vo.getOpenId());
         if (!"WAITING".equals(game.getStatus())) return true;
         List<Map<String, Object>> players = werewolfPlayers(game).stream()
                 .filter(player -> !vo.getOpenId().equals(player.get("openId")))
@@ -1926,7 +1921,6 @@ public class MiniGameServiceImpl implements MiniGameService {
                     .last("limit 1"));
         }
         ValidatorUtil.checkNotNull(game, "房间不存在，请检查房间号");
-        if (vo.getFamilyId() != null) ValidatorUtil.checkArgument(Objects.equals(game.getFamilyId(), vo.getFamilyId()), "房间不在当前圈子");
         return game;
     }
 
@@ -1947,6 +1941,10 @@ public class MiniGameServiceImpl implements MiniGameService {
 
     private Map<String, Object> werewolfPlayer(List<Map<String, Object>> players, String openId) {
         return players.stream().filter(player -> openId.equals(player.get("openId"))).findFirst().orElse(null);
+    }
+
+    private void requireWerewolfPlayer(WerewolfGame game, String openId) {
+        ValidatorUtil.checkArgument(werewolfPlayer(werewolfPlayers(game), openId) != null, "你不在这个房间中");
     }
 
     private void reseatWerewolfPlayers(List<Map<String, Object>> players) {
