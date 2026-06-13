@@ -3,6 +3,7 @@ package com.wx.gift.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.mapper.BaseUserMapper;
+import com.wx.gift.mapper.BlocksRecordMapper;
 import com.wx.gift.mapper.ChildMapper;
 import com.wx.gift.mapper.FamilyMapper;
 import com.wx.gift.mapper.FamilyMemberMapper;
@@ -17,6 +18,7 @@ import com.wx.gift.mapper.WordPackMapper;
 import com.wx.gift.mapper.WordPlayRecordMapper;
 import com.wx.gift.mapper.WordProgressMapper;
 import com.wx.gift.model.BaseUser;
+import com.wx.gift.model.BlocksRecord;
 import com.wx.gift.model.Child;
 import com.wx.gift.model.Family;
 import com.wx.gift.model.FamilyMember;
@@ -33,6 +35,7 @@ import com.wx.gift.model.WordProgress;
 import com.wx.gift.service.MiniGameService;
 import com.wx.gift.util.GsonUtil;
 import com.wx.gift.util.ValidatorUtil;
+import com.wx.gift.vo.BlocksVo;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
@@ -82,6 +85,8 @@ public class MiniGameServiceImpl implements MiniGameService {
     @Autowired
     private TangramRecordMapper tangramRecordMapper;
     @Autowired
+    private BlocksRecordMapper blocksRecordMapper;
+    @Autowired
     private WordPackMapper wordPackMapper;
     @Autowired
     private WordItemMapper wordItemMapper;
@@ -121,13 +126,13 @@ public class MiniGameServiceImpl implements MiniGameService {
         prisoner.put("recommendedAge", "7岁+");
         prisoner.put("difficulties", "10轮博弈，总分更高获胜");
         list.add(prisoner);
-        Map<String, Object> tangram = new LinkedHashMap<>();
-        tangram.put("key", "tangram");
-        tangram.put("name", "七巧拼图");
-        tangram.put("summary", "空间拼图 / 吸附闯关 / 比拼手速");
-        tangram.put("recommendedAge", "5岁+");
-        tangram.put("difficulties", "移动、旋转、翻转七块图形");
-        list.add(tangram);
+        Map<String, Object> blocks = new LinkedHashMap<>();
+        blocks.put("key", "blocks");
+        blocks.put("name", "方块下落挑战");
+        blocks.put("summary", "经典下落 / 消行得分 / 比拼手速");
+        blocks.put("recommendedAge", "6岁+");
+        blocks.put("difficulties", "移动、旋转、软降、硬降");
+        list.add(blocks);
         Map<String, Object> word = new LinkedHashMap<>();
         word.put("key", "wordDetective");
         word.put("name", "字词小侦探");
@@ -471,6 +476,48 @@ public class MiniGameServiceImpl implements MiniGameService {
                 .orderByAsc(TangramRecord::getMoveCount);
         if (limit != null) wrapper.last("limit " + limit);
         return tangramRecordMapper.selectList(wrapper).stream().map(this::tangramRecordDto).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> saveBlocksRecord(BlocksVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Date now = new Date();
+        BlocksRecord record = new BlocksRecord();
+        record.setFamilyId(vo.getFamilyId());
+        record.setPlayerOpenId(vo.getOpenId());
+        record.setPlayerName(userName(vo.getOpenId()));
+        record.setScore(Math.max(0, vo.getScore() == null ? 0 : vo.getScore()));
+        record.setLineCount(Math.max(0, vo.getLineCount() == null ? 0 : vo.getLineCount()));
+        record.setLevel(Math.max(1, vo.getLevel() == null ? 1 : vo.getLevel()));
+        record.setDurationMs(Math.max(0, vo.getDurationMs() == null ? 0 : vo.getDurationMs()));
+        record.setMode(StringUtils.defaultIfBlank(vo.getMode(), "classic"));
+        record.setStatus("active");
+        record.setCreateTime(now);
+        record.setModifyTime(now);
+        blocksRecordMapper.insert(record);
+        return blocksRecordDto(record);
+    }
+
+    @Override
+    public List<Map<String, Object>> blocksLeaderboard(BlocksVo vo) {
+        ValidatorUtil.checkNotBlank(vo.getOpenId(), "openId 不能为空");
+        ValidatorUtil.checkNotNull(vo.getFamilyId(), "familyId 不能为空");
+        requireFamilyMember(vo.getFamilyId(), vo.getOpenId());
+        Integer limit = resolveLimit(vo.getLimit());
+        LambdaQueryWrapper<BlocksRecord> wrapper = new LambdaQueryWrapper<BlocksRecord>()
+                .eq(BlocksRecord::getFamilyId, vo.getFamilyId())
+                .eq(BlocksRecord::getStatus, "active");
+        if (StringUtils.isNotBlank(vo.getMode())) wrapper.eq(BlocksRecord::getMode, vo.getMode());
+        wrapper
+                .orderByDesc(BlocksRecord::getScore)
+                .orderByDesc(BlocksRecord::getLineCount)
+                .orderByDesc(BlocksRecord::getLevel)
+                .orderByAsc(BlocksRecord::getDurationMs);
+        if (limit != null) wrapper.last("limit " + limit);
+        return blocksRecordMapper.selectList(wrapper).stream().map(this::blocksRecordDto).collect(Collectors.toList());
     }
 
     @Override
@@ -1874,6 +1921,21 @@ public class MiniGameServiceImpl implements MiniGameService {
         map.put("hintCount", record.getHintCount());
         map.put("moveCount", record.getMoveCount());
         map.put("starCount", record.getStarCount());
+        map.put("createTime", record.getCreateTime());
+        return map;
+    }
+
+    private Map<String, Object> blocksRecordDto(BlocksRecord record) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", record.getId());
+        map.put("familyId", record.getFamilyId());
+        map.put("playerOpenId", record.getPlayerOpenId());
+        map.put("playerName", record.getPlayerName());
+        map.put("score", record.getScore());
+        map.put("lineCount", record.getLineCount());
+        map.put("level", record.getLevel());
+        map.put("durationMs", record.getDurationMs());
+        map.put("mode", record.getMode());
         map.put("createTime", record.getCreateTime());
         return map;
     }

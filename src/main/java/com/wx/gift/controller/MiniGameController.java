@@ -2,6 +2,7 @@ package com.wx.gift.controller;
 
 import com.wx.gift.dto.SchulteRecordDTO;
 import com.wx.gift.service.MiniGameService;
+import com.wx.gift.vo.BlocksVo;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
@@ -146,6 +147,16 @@ public class MiniGameController {
     @RequestMapping("/tangram/leaderboard")
     public List<Map<String, Object>> tangramLeaderboard(@RequestBody TangramVo vo) {
         return miniGameService.tangramLeaderboard(vo);
+    }
+
+    @RequestMapping("/blocks/saveRecord")
+    public Map<String, Object> saveBlocksRecord(@RequestBody BlocksVo vo) {
+        return miniGameService.saveBlocksRecord(vo);
+    }
+
+    @RequestMapping("/blocks/leaderboard")
+    public List<Map<String, Object>> blocksLeaderboard(@RequestBody BlocksVo vo) {
+        return miniGameService.blocksLeaderboard(vo);
     }
 
     @RequestMapping("/nim/create")

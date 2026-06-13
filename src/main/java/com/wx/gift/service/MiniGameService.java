@@ -1,6 +1,7 @@
 package com.wx.gift.service;
 
 import com.wx.gift.dto.SchulteRecordDTO;
+import com.wx.gift.vo.BlocksVo;
 import com.wx.gift.vo.GomokuGameVo;
 import com.wx.gift.vo.NimGameVo;
 import com.wx.gift.vo.PrisonerGameVo;
@@ -38,6 +39,8 @@ public interface MiniGameService {
     List<Map<String, Object>> riverCrossingLeaderboard(RiverCrossingVo vo);
     Map<String, Object> saveTangramRecord(TangramVo vo);
     List<Map<String, Object>> tangramLeaderboard(TangramVo vo);
+    Map<String, Object> saveBlocksRecord(BlocksVo vo);
+    List<Map<String, Object>> blocksLeaderboard(BlocksVo vo);
     Map<String, Object> createNimGame(NimGameVo vo);
     Map<String, Object> joinNimGame(NimGameVo vo);
     Map<String, Object> randomNimGame(NimGameVo vo);
