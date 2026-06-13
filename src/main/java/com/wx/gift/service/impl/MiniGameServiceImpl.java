@@ -790,6 +790,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         List<PrisonerGame> games = prisonerGameMapper.selectList(new LambdaQueryWrapper<PrisonerGame>()
                 .eq(PrisonerGame::getFamilyId, vo.getFamilyId())
                 .eq(PrisonerGame::getStatus, "FINISHED")
+                .ne(PrisonerGame::getRoomType, "SINGLE")
                 .orderByDesc(PrisonerGame::getFinishedAt));
         Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
         for (PrisonerGame game : games) {
