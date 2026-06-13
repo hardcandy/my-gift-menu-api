@@ -65,6 +65,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
@@ -586,7 +587,7 @@ public class MiniGameServiceImpl implements MiniGameService {
         if (players.stream().anyMatch(player -> vo.getOpenId().equals(player.get("openId")))) return blokusDto(game, vo.getOpenId());
         ValidatorUtil.checkArgument(players.size() < game.getPlayerCount(), "房间已满");
         Map<String, Object> player = new LinkedHashMap<>();
-        int seat = players.size() + 1;
+        int seat = nextAvailableBlokusSeat(players, game.getPlayerCount());
         player.put("openId", vo.getOpenId());
         player.put("name", userName(vo.getOpenId()));
         player.put("seat", seat);
@@ -2274,6 +2275,13 @@ public class MiniGameServiceImpl implements MiniGameService {
         List<Integer> seats = players.stream().map(player -> toInt(player.get("seat"))).sorted().collect(Collectors.toList());
         for (Integer seat : seats) if (seat > currentSeat) return seat;
         return seats.isEmpty() ? 1 : seats.get(0);
+    }
+
+    private int nextAvailableBlokusSeat(List<Map<String, Object>> players, Integer playerCount) {
+        Set<Integer> used = players.stream().map(player -> toInt(player.get("seat"))).collect(Collectors.toSet());
+        int max = playerCount == null ? 4 : playerCount;
+        for (int seat = 1; seat <= max; seat++) if (!used.contains(seat)) return seat;
+        return players.size() + 1;
     }
 
     private void finishBlokus(BlokusGame game) {
